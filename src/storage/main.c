@@ -220,8 +220,8 @@ again:
       free(mem);
       return MHD_CONTENT_READER_END_WITH_ERROR;
     }
-    sprintf(path, "%s/%s/%c%c/%s", s->server_path, de->d_name, s->e_hnk[0], s->e_hnk[1],
-      &s->e_hnk[2]);
+    sprintf(path, "%s/%s/%c%c/%s", s->server_path, de->d_name,
+            s->e_hnk[0], s->e_hnk[1], &s->e_hnk[2]);
     free(mem);
     s->e_hnk_dir = opendir(path);
     if( NULL == s->e_hnk_dir ) {
@@ -280,7 +280,9 @@ static int dh(void *cls, struct MHD_Connection *connection,
       /*    crc_cls */ s,
       /*       crfc */ &free_read_blocks_state);
     ret = MHD_queue_response(connection, MHD_HTTP_OK, s->response);
-    // XXX does crfc get called if this failed?
+    if( MHD_NO == ret ) {
+			free_read_blocks_state(s);
+		}
   } else if( strcmp(method, MHD_HTTP_METHOD_PUT) == 0 ) {
     int gen;
     char *e_hnk, *c_index;
