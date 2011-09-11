@@ -1,4 +1,4 @@
-/* -*- Mode: C; indent-tabs-mode: t; c-basic-offset: 2; tab-width: 2 -*- */
+/* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 2; tab-width: 2 -*- */
 /*
  * main.c
  * Copyright (C) David Barksdale 2011 <amatus.amongus@gmail.com>
@@ -281,8 +281,8 @@ static int dh(void *cls, struct MHD_Connection *connection,
       /*       crfc */ &free_read_blocks_state);
     ret = MHD_queue_response(connection, MHD_HTTP_OK, s->response);
     if( MHD_NO == ret ) {
-			free_read_blocks_state(s);
-		}
+      free_read_blocks_state(s);
+    }
   } else if( strcmp(method, MHD_HTTP_METHOD_PUT) == 0 ) {
     int gen;
     char *e_hnk, *c_index;
