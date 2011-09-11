@@ -22,6 +22,8 @@
 #include <microhttpd.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -183,7 +185,7 @@ again:
         free(mem);
         return MHD_CONTENT_READER_END_WITH_ERROR;
       }
-      sprintf(content, "%s %llu", de->d_name, st.st_size);
+      sprintf(content, "%s %jd", de->d_name, (intmax_t)st.st_size);
       free(mem);
       len = strlen(footer_prefix) + 10;
       footer = malloc(len + 1);
