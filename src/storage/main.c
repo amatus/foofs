@@ -166,6 +166,10 @@ again:
       return MHD_CONTENT_READER_END_WITH_ERROR;
     }
     if( NULL != de ) {
+      if( '.' == de->d_name[0] ) {
+        free(mem);
+        goto again;
+      }
       path = strprintf("%s/%s", s->e_hnk_path, de->d_name);
       if( NULL == path ) {
         free(mem);
@@ -214,6 +218,10 @@ again:
     return MHD_CONTENT_READER_END_WITH_ERROR;
   }
   if( NULL != de ) {
+    if( '.' == de->d_name[0] ) {
+      free(mem);
+      goto again;
+    }
     path = strprintf("%s/%s/%c%c/%s", s->server_path, de->d_name,
                      s->e_hnk[0], s->e_hnk[1], &s->e_hnk[2]);
     if( NULL == path ) {
@@ -257,7 +265,7 @@ static int dh(void *cls, struct MHD_Connection *connection,
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
     }
-    if( strlen(s->e_hnk) < 3 ) {
+    if( strlen(s->e_hnk) < 3 || '.' == s->e_hnk[0] ) {
       free_read_blocks_state(s);
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
