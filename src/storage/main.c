@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <microhttpd.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,49 +28,54 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static int parse_url(const char *url, int *gen, char **e_hnk, char **c_index)
-{
-  int n;
-  char *buf, *p;
+static char *strprintf(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
 
-  if( NULL != gen ) {
-    if( sscanf(url, "/%d/%n", gen, &n) != 2 ) {
-      return 0;
-    }
-    url += n;
+static char *strprintf(const char *format, ...)
+{
+  va_list arg;
+  int len;
+  char *str;
+
+  va_start(arg, format);
+  len = vsnprintf(NULL, 0, format, arg);
+  va_end(arg);
+  str = malloc(len + 1);
+  if( NULL == str ) {
+    return NULL;
+  }
+  va_start(arg, format);
+  vsprintf(str, format, arg);
+  va_end(arg);
+  return str;
+}
+
+static const char *copy_path_elem(const char *path, char **out)
+{
+  const char *p;
+  char *buf;
+  size_t n;
+
+  if( NULL == out ) {
+    return path;
+  }
+  for(; *path == '/'; path++) {
+  }
+  p = strchr(path, '/');
+  if( NULL == p ) {
+    n = strlen(path);
   } else {
-    if( '/' != url[0] ) {
-      return 0;
-    }
-    url++;
+    n = p - path;
   }
-  if( NULL != e_hnk ) {
-    p = strchr(url, '/');
-    if( NULL == p ) {
-      n = strlen(url);
-    } else {
-      n = p - url;
-    }
-    buf = malloc(n + 1);
-    memcpy(buf, url, n);
-    buf[n] = 0;
-    *e_hnk = buf;
-    url += n + 1;
+  buf = malloc(n + 1);
+  if( NULL == buf ) {
+    *out = NULL;
+    return path;
   }
-  if( NULL != c_index ) {
-    p = strchr(url, '/');
-    if( NULL == p ) {
-      n = strlen(url);
-    } else {
-      n = p - url;
-    }
-    buf = malloc(n + 1);
-    memcpy(buf, url, n);
-    buf[n] = 0;
-    *c_index = buf;
-    //url += n + 1;
-  }
-  return 1;
+  memcpy(buf, path, n);
+  buf[n] = 0;
+  *out = buf;
+  return path + n;
 }
 
 struct read_blocks_state {
@@ -160,13 +166,11 @@ again:
       return MHD_CONTENT_READER_END_WITH_ERROR;
     }
     if( NULL != de ) {
-      len = strlen(s->e_hnk_path) + strlen(de->d_name) + 1;
-      path = malloc(len + 1);
+      path = strprintf("%s/%s", s->e_hnk_path, de->d_name);
       if( NULL == path ) {
         free(mem);
         return MHD_CONTENT_READER_END_WITH_ERROR;
       }
-      sprintf(path, "%s/%s", s->e_hnk_path, de->d_name);
       len = stat(path, &st);
       if( -1 == len || !S_ISREG(st.st_mode)) {
         free(path);
@@ -179,21 +183,17 @@ again:
         free(mem);
         goto again;
       }
-      len = strlen(de->d_name) + 1 + 21;
-      content = malloc(len + 1);
+      content = strprintf("%s %jd", de->d_name, (intmax_t)st.st_size);
       if( NULL == content ) {
         free(mem);
         return MHD_CONTENT_READER_END_WITH_ERROR;
       }
-      sprintf(content, "%s %jd", de->d_name, (intmax_t)st.st_size);
       free(mem);
-      len = strlen(footer_prefix) + 10;
-      footer = malloc(len + 1);
+      footer = strprintf("%s%u", footer_prefix, s->count);
       if( NULL == footer ) {
         free(content);
         return MHD_CONTENT_READER_END_WITH_ERROR;
       }
-      sprintf(footer, "%s%u", footer_prefix, s->count);
       s->count++;
       MHD_add_response_footer(s->response, footer, content);
       free(footer);
@@ -214,14 +214,12 @@ again:
     return MHD_CONTENT_READER_END_WITH_ERROR;
   }
   if( NULL != de ) {
-    len = strlen(s->server_path) + strlen(de->d_name) + strlen(s->e_hnk) + 3;
-    path = malloc(len + 1);
+    path = strprintf("%s/%s/%c%c/%s", s->server_path, de->d_name,
+                     s->e_hnk[0], s->e_hnk[1], &s->e_hnk[2]);
     if( NULL == path ) {
       free(mem);
       return MHD_CONTENT_READER_END_WITH_ERROR;
     }
-    sprintf(path, "%s/%s/%c%c/%s", s->server_path, de->d_name,
-            s->e_hnk[0], s->e_hnk[1], &s->e_hnk[2]);
     free(mem);
     s->e_hnk_dir = opendir(path);
     if( NULL == s->e_hnk_dir ) {
@@ -244,7 +242,6 @@ static int dh(void *cls, struct MHD_Connection *connection,
   int status_code = MHD_HTTP_NOT_IMPLEMENTED;
 
   if( strcmp(method, MHD_HTTP_METHOD_GET) == 0 ) {
-    char *e_hnk;
     struct read_blocks_state *s;
 
     s = malloc(sizeof(*s));
@@ -254,7 +251,8 @@ static int dh(void *cls, struct MHD_Connection *connection,
     }
     memset(s, 0, sizeof(*s));
     s->fd = -1;
-    if( !parse_url(url, NULL, &s->e_hnk, NULL)) {
+    url = copy_path_elem(url, &s->e_hnk);
+    if( NULL == s->e_hnk ) {
       free_read_blocks_state(s);
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
@@ -284,13 +282,27 @@ static int dh(void *cls, struct MHD_Connection *connection,
       free_read_blocks_state(s);
     }
   } else if( strcmp(method, MHD_HTTP_METHOD_PUT) == 0 ) {
-    int gen;
-    char *e_hnk, *c_index;
+    char *gen, *e_hnk, *c_index;
 
-    if( !parse_url(url, &gen, &e_hnk, &c_index)) {
+    url = copy_path_elem(url, &gen);
+    if( NULL == gen ) {
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
     }
+    url = copy_path_elem(url, &e_hnk);
+    if( NULL == e_hnk ) {
+      free(gen);
+      status_code = MHD_HTTP_NOT_FOUND;
+      goto err;
+    }
+    copy_path_elem(url, &c_index);
+    if( NULL == c_index ) {
+      free(gen);
+      free(e_hnk);
+      status_code = MHD_HTTP_NOT_FOUND;
+      goto err;
+    }
+    free(gen);
     free(e_hnk);
     free(c_index);
     goto err;
