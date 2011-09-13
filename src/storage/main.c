@@ -28,6 +28,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+char *g_storage_root = "/tmp/test_storage";
+
 static char *strprintf(const char *format, ...)
   __attribute__((format(printf, 1, 2)));
 
@@ -56,7 +58,7 @@ static const char *copy_path_elem(const char *path, char **out)
   char *buf;
   size_t n;
 
-  if( NULL == out ) {
+  if( NULL == path || NULL == out ) {
     return path;
   }
   for(; *path == '/'; path++) {
@@ -76,6 +78,50 @@ static const char *copy_path_elem(const char *path, char **out)
   buf[n] = 0;
   *out = buf;
   return path + n;
+}
+
+static int mkdirs(const char *pathname, mode_t mode)
+{
+  char *path, *elem, *tmp;
+
+  if( NULL == pathname ) {
+    return EFAULT;
+  }
+  if( '/' == pathname[0] ) {
+    path = strdup("/.");
+  } else {
+    path = strdup(".");
+  }
+  while( 1 ) {
+    pathname = copy_path_elem(pathname, &elem);
+    if( NULL == elem ) {
+      return ENOMEM;
+    }
+    if( 0 == elem[0] ) {
+      return 0;
+    }
+    tmp = strprintf("%s/%s", path, elem);
+    free(path);
+    if( NULL == tmp ) {
+      return ENOMEM;
+    }
+    path = tmp;
+    if( -1 == mkdir(path, mode) && EEXIST != errno ) {
+      return errno;
+    }
+  }
+}
+
+static int do_readdir(DIR *dirp, void **mem, struct dirent **result) {
+  size_t len;
+
+  len = offsetof(struct dirent, d_name) + fpathconf(dirfd(dirp), _PC_NAME_MAX)
+        + 1;
+  *mem = malloc(len);
+  if( NULL == *mem ) {
+    return 1;
+  }
+  return readdir_r(dirp, *mem, result);
 }
 
 struct read_blocks_state {
@@ -113,20 +159,9 @@ static void free_read_blocks_state(void *cls)
   }
   if( -1 != s->fd ) {
     close(s->fd);
+    // TODO: handle EINTR
   }
   free(s);
-}
-
-static int do_readdir(DIR *dirp, void **mem, struct dirent **result) {
-  size_t len;
-
-  len = offsetof(struct dirent, d_name) + fpathconf(dirfd(dirp), _PC_NAME_MAX)
-        + 1;
-  *mem = malloc(len);
-  if( NULL == *mem ) {
-    return 1;
-  }
-  return readdir_r(dirp, *mem, result);
 }
 
 static ssize_t read_blocks(void *cls, uint64_t pos, char *buf, size_t max)
@@ -154,6 +189,7 @@ again:
       return len;
     }
     close(s->fd);
+    // TODO: handle EINTR
     s->fd = -1;
   }
   // we don't have an open file, so find one to open
@@ -184,15 +220,15 @@ again:
       s->fd = open(path, O_RDONLY);
       free(path);
       if( -1 == s->fd ) {
+        // TODO: handle EINTR
         free(mem);
         goto again;
       }
       content = strprintf("%s %jd", de->d_name, (intmax_t)st.st_size);
+      free(mem);
       if( NULL == content ) {
-        free(mem);
         return MHD_CONTENT_READER_END_WITH_ERROR;
       }
-      free(mem);
       footer = strprintf("%s%u", footer_prefix, s->count);
       if( NULL == footer ) {
         free(content);
@@ -224,11 +260,10 @@ again:
     }
     path = strprintf("%s/%s/%c%c/%s", s->server_path, de->d_name,
                      s->e_hnk[0], s->e_hnk[1], &s->e_hnk[2]);
+    free(mem);
     if( NULL == path ) {
-      free(mem);
       return MHD_CONTENT_READER_END_WITH_ERROR;
     }
-    free(mem);
     s->e_hnk_dir = opendir(path);
     if( NULL == s->e_hnk_dir ) {
       free(path);
@@ -239,6 +274,33 @@ again:
   }
   free(mem);
   return MHD_CONTENT_READER_END_OF_STREAM;
+}
+
+struct write_blocks_state {
+  int fd;
+  char *filename;
+  char *tmpfile;
+};
+
+static void notify_completed(void *cls, struct MHD_Connection *connection,
+ void **con_cls, enum MHD_RequestTerminationCode toe)
+{
+  struct write_blocks_state *s = *con_cls;
+
+  if( NULL == s ) {
+    return;
+  }
+  if( -1 != s->fd ) {
+    close(s->fd);
+    // TODO: handle EINTR
+  }
+  if( NULL != s->filename ) {
+    free(s->filename);
+  }
+  if( NULL != s->tmpfile ) {
+    unlink(s->tmpfile);
+    free(s->tmpfile);
+  }
 }
 
 static int dh(void *cls, struct MHD_Connection *connection,
@@ -259,26 +321,21 @@ static int dh(void *cls, struct MHD_Connection *connection,
     }
     memset(s, 0, sizeof(*s));
     s->fd = -1;
-    url = copy_path_elem(url, &s->e_hnk);
-    if( NULL == s->e_hnk ) {
+    copy_path_elem(url, &s->e_hnk);
+    if( NULL == s->e_hnk || strlen(s->e_hnk) < 3 || '.' == s->e_hnk[0] ) {
       free_read_blocks_state(s);
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
     }
-    if( strlen(s->e_hnk) < 3 || '.' == s->e_hnk[0] ) {
-      free_read_blocks_state(s);
-      status_code = MHD_HTTP_NOT_FOUND;
-      goto err;
-    }
-    s->server_path = strdup("/tmp/test_storage");
+    s->server_path = strdup(g_storage_root);
     s->server_dir = opendir(s->server_path);
     if( NULL == s->server_dir ) {
       free_read_blocks_state(s);
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
     }
-    // do a callback response which looks for matching blocks and sends them
-    // while adding footers which indicate which indexes they were
+    // Do a callback response which looks for matching blocks and sends them
+    // while adding footers which indicate which indexes they were.
     s->response = MHD_create_response_from_callback(
       /*       size */ MHD_SIZE_UNKNOWN, 
       /* block_size */ 64 * 1024,
@@ -290,30 +347,111 @@ static int dh(void *cls, struct MHD_Connection *connection,
       free_read_blocks_state(s);
     }
   } else if( strcmp(method, MHD_HTTP_METHOD_PUT) == 0 ) {
+    struct write_blocks_state *s = *con_cls;
     char *gen, *e_hnk, *c_index;
+    char *path, *tmp;
+    ssize_t len;
 
+    if( NULL != s ) {
+      if( 0 == *upload_data_size ) {
+        // no more data, make sure everything is on disk before giving the OK
+        ret = fsync(s->fd);
+        if( -1 == ret ) {
+          status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+          goto err;
+        }
+        ret = close(s->fd);
+        if( -1 == ret ) {
+          // TODO: handle EINTR
+          status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+          goto err;
+        }
+        s->fd = -1;
+        ret = rename(s->tmpfile, s->filename);
+        if( -1 == ret ) {
+          status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+          goto err;
+        }
+        status_code = MHD_HTTP_OK;
+        // not actually an error, but we have no document to return right now.
+        // perhaps we could return a checksum or something.
+        goto err;
+      }
+write_again:
+      len = write(s->fd, upload_data, *upload_data_size);
+      if( -1 == len ) {
+        if( EINTR == errno ) {
+          goto write_again;
+        }
+        status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+        goto err;
+      }
+      *upload_data_size -= len;
+      return MHD_YES;
+    }
+    *con_cls = s = malloc(sizeof(*s));
+    if( NULL == s ) {
+      status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+      goto err;
+    }
+    memset(s, 0, sizeof(*s));
+    s->fd = -1;
     url = copy_path_elem(url, &gen);
-    if( NULL == gen ) {
+    if( NULL == gen || strlen(gen) < 1 || '.' == gen[0] ) {
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
     }
     url = copy_path_elem(url, &e_hnk);
-    if( NULL == e_hnk ) {
+    if( NULL == e_hnk || strlen(e_hnk) < 3 || '.' == e_hnk[0] ) {
       free(gen);
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
     }
     copy_path_elem(url, &c_index);
-    if( NULL == c_index ) {
+    if( NULL == c_index || strlen(c_index) < 1 || '.' == c_index[0] ) {
       free(gen);
       free(e_hnk);
       status_code = MHD_HTTP_NOT_FOUND;
       goto err;
     }
+    tmp = strprintf("%s/%s/%c%c/%s", g_storage_root, gen, e_hnk[0], e_hnk[1],
+                    &e_hnk[2]);
     free(gen);
     free(e_hnk);
+    if( NULL == tmp ) {
+      free(c_index);
+      status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+      goto err;
+    }
+    path = tmp;
+    mkdirs(path, 0777);
+    tmp = strprintf("%s/%s", path, c_index);
+    if( NULL == tmp ) {
+      free(path);
+      free(c_index);
+      status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+      goto err;
+    }
+    s->filename = tmp;
+    tmp = strprintf("%s/.%s", path, c_index);
+    free(path);
     free(c_index);
-    goto err;
+    if( NULL == tmp ) {
+      status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+      goto err;
+    }
+    s->tmpfile = tmp;
+    s->fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL, 0777);
+    if( -1 == s->fd ) {
+      // TODO: handle EINTR
+      if( EEXIST == errno ) {
+        status_code = MHD_HTTP_LOCKED;
+      } else {
+        status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
+      }
+      goto err;
+    }
+    return MHD_YES;
   } else {
     goto err;
   }
@@ -339,6 +477,7 @@ int main(int argc, char **argv)
     /*  dh_cls */ NULL,
     /* options */ //MHD_OPTION_HTTPS_MEM_KEY, key_pem,
                   //MHD_OPTION_HTTPS_MEM_CERT, cert_pem,
+                  MHD_OPTION_NOTIFY_COMPLETED, &notify_completed, NULL,
                   MHD_OPTION_END);
   if( NULL == daemon )
   {
