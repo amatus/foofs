@@ -348,8 +348,10 @@ static int dh(void *cls, struct MHD_Connection *connection,
     }
   } else if( strcmp(method, MHD_HTTP_METHOD_PUT) == 0 ) {
     struct write_blocks_state *s = *con_cls;
-    char *gen, *e_hnk, *c_index;
+    const char *gen;
+    char *e_hnk, *c_index;
     char *path, *tmp;
+    struct stat st;
     ssize_t len;
 
     if( NULL != s ) {
@@ -396,27 +398,26 @@ write_again:
     }
     memset(s, 0, sizeof(*s));
     s->fd = -1;
-    url = copy_path_elem(url, &gen);
-    if( NULL == gen || strlen(gen) < 1 || '.' == gen[0] ) {
-      status_code = MHD_HTTP_NOT_FOUND;
-      goto err;
-    }
     url = copy_path_elem(url, &e_hnk);
     if( NULL == e_hnk || strlen(e_hnk) < 3 || '.' == e_hnk[0] ) {
-      free(gen);
-      status_code = MHD_HTTP_NOT_FOUND;
+      status_code = MHD_HTTP_BAD_REQUEST;
       goto err;
     }
     copy_path_elem(url, &c_index);
     if( NULL == c_index || strlen(c_index) < 1 || '.' == c_index[0] ) {
-      free(gen);
       free(e_hnk);
-      status_code = MHD_HTTP_NOT_FOUND;
+      status_code = MHD_HTTP_BAD_REQUEST;
+      goto err;
+    }
+    gen = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "gen");
+    if( NULL == gen || strlen(gen) < 1 || '.' == gen[0] ) {
+      free(c_index);
+      free(e_hnk);
+      status_code = MHD_HTTP_BAD_REQUEST;
       goto err;
     }
     tmp = strprintf("%s/%s/%c%c/%s", g_storage_root, gen, e_hnk[0], e_hnk[1],
                     &e_hnk[2]);
-    free(gen);
     free(e_hnk);
     if( NULL == tmp ) {
       free(c_index);
@@ -433,6 +434,14 @@ write_again:
       goto err;
     }
     s->filename = tmp;
+    // TODO: check for the existance in all generations
+    ret = stat(tmp, &st);
+    if( 0 == ret ) {
+      free(path);
+      free(c_index);
+      status_code = MHD_HTTP_CONFLICT;
+      goto err;
+    }
     tmp = strprintf("%s/.%s", path, c_index);
     free(path);
     free(c_index);
