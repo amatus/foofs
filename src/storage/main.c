@@ -1,4 +1,5 @@
 /* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 2; tab-width: 2 -*- */
+/* vim: set expandtab ts=2 sw=2: */
 /*
  * main.c
  * Copyright (C) David Barksdale 2011 <amatus.amongus@gmail.com>
@@ -27,13 +28,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "storage.h"
 
 char *g_storage_root = "/tmp/test_storage";
 
-static char *strprintf(const char *format, ...)
-  __attribute__((format(printf, 1, 2)));
-
-static char *strprintf(const char *format, ...)
+char *strprintf(const char *format, ...)
 {
   va_list arg;
   int len;
@@ -52,7 +51,7 @@ static char *strprintf(const char *format, ...)
   return str;
 }
 
-static const char *copy_path_elem(const char *path, char **out)
+const char *copy_path_elem(const char *path, char **out)
 {
   const char *p;
   char *buf;
@@ -112,168 +111,33 @@ static int mkdirs(const char *pathname, mode_t mode)
   }
 }
 
-static int do_readdir(DIR *dirp, void **mem, struct dirent **result) {
+int dir_foreach(DIR *dirp, dir_foreach_cb cb, void *cls)
+{
   size_t len;
+  void *mem;
+  struct dirent *de;
+  int count;
 
   len = offsetof(struct dirent, d_name) + fpathconf(dirfd(dirp), _PC_NAME_MAX)
         + 1;
-  *mem = malloc(len);
-  if( NULL == *mem ) {
-    return 1;
+  mem = malloc(len);
+  if( NULL == mem ) {
+    return -1;
   }
-  return readdir_r(dirp, *mem, result);
-}
-
-struct read_blocks_state {
-  struct MHD_Response *response;
-  char *e_hnk;
-  char *server_path;
-  DIR *server_dir;
-  char *e_hnk_path;
-  DIR *e_hnk_dir;
-  int fd;
-  unsigned int count;
-};
-
-static void free_read_blocks_state(void *cls)
-{
-  struct read_blocks_state *s = cls;
-
-  if( NULL != s->response ) {
-    MHD_destroy_response(s->response);
-  }
-  if( NULL != s->e_hnk ) {
-    free(s->e_hnk);
-  }
-  if( NULL != s->server_path ) {
-    free(s->server_path);
-  }
-  if( NULL != s->server_dir ) {
-    closedir(s->server_dir);
-  }
-  if( NULL != s->e_hnk_path ) {
-    free(s->e_hnk_path);
-  }
-  if( NULL != s->e_hnk_dir ) {
-    closedir(s->e_hnk_dir);
-  }
-  if( -1 != s->fd ) {
-    close(s->fd);
-    // TODO: handle EINTR
-  }
-  free(s);
-}
-
-static ssize_t read_blocks(void *cls, uint64_t pos, char *buf, size_t max)
-{
-  struct read_blocks_state *s = cls;
-  struct dirent *de;
-  void *mem;
-  char *path;
-  char *footer;
-  char *content;
-  struct stat st;
-  ssize_t len;
-  static const char *footer_prefix = "X-Block-";
-
-again:
-  if( -1 != s->fd ) {
-    len = read(s->fd, buf, max);
-    if( -1 == len ) {
-      if( EINTR == errno ) {
-        goto again;
+  for( count = 0; ; count++ ) {
+    if( 0 == readdir_r(dirp, mem, &de)) {
+      if( NULL == de ) {
+        break;
       }
-      return MHD_CONTENT_READER_END_WITH_ERROR;
+      if( 0 != cb(cls, de->d_name)) {
+        break;
+      }
+    } else {
+      count = -1;
+      break;
     }
-    if( 0 < len ) {
-      return len;
-    }
-    close(s->fd);
-    // TODO: handle EINTR
-    s->fd = -1;
   }
-  // we don't have an open file, so find one to open
-  if( NULL != s->e_hnk_dir ) {
-    len = do_readdir(s->e_hnk_dir, &mem, &de);
-    if( 0 != len ) {
-      if( NULL != mem ) {
-        free(mem);
-      }
-      return MHD_CONTENT_READER_END_WITH_ERROR;
-    }
-    if( NULL != de ) {
-      if( '.' == de->d_name[0] ) {
-        free(mem);
-        goto again;
-      }
-      path = strprintf("%s/%s", s->e_hnk_path, de->d_name);
-      if( NULL == path ) {
-        free(mem);
-        return MHD_CONTENT_READER_END_WITH_ERROR;
-      }
-      len = stat(path, &st);
-      if( -1 == len || !S_ISREG(st.st_mode)) {
-        free(path);
-        free(mem);
-        goto again;
-      }
-      s->fd = open(path, O_RDONLY);
-      free(path);
-      if( -1 == s->fd ) {
-        // TODO: handle EINTR
-        free(mem);
-        goto again;
-      }
-      content = strprintf("%s %jd", de->d_name, (intmax_t)st.st_size);
-      free(mem);
-      if( NULL == content ) {
-        return MHD_CONTENT_READER_END_WITH_ERROR;
-      }
-      footer = strprintf("%s%u", footer_prefix, s->count);
-      if( NULL == footer ) {
-        free(content);
-        return MHD_CONTENT_READER_END_WITH_ERROR;
-      }
-      s->count++;
-      MHD_add_response_footer(s->response, footer, content);
-      free(footer);
-      free(content);
-      goto again;
-    }
-    free(mem);
-    free(s->e_hnk_path);
-    s->e_hnk_path = NULL;
-    closedir(s->e_hnk_dir);
-    s->e_hnk_dir = NULL;
-  }
-  len = do_readdir(s->server_dir, &mem, &de);
-  if( 0 != len ) {
-    if( NULL != mem ) {
-      free(mem);
-    }
-    return MHD_CONTENT_READER_END_WITH_ERROR;
-  }
-  if( NULL != de ) {
-    if( '.' == de->d_name[0] ) {
-      free(mem);
-      goto again;
-    }
-    path = strprintf("%s/%s/%c%c/%s", s->server_path, de->d_name,
-                     s->e_hnk[0], s->e_hnk[1], &s->e_hnk[2]);
-    free(mem);
-    if( NULL == path ) {
-      return MHD_CONTENT_READER_END_WITH_ERROR;
-    }
-    s->e_hnk_dir = opendir(path);
-    if( NULL == s->e_hnk_dir ) {
-      free(path);
-      goto again;
-    }
-    s->e_hnk_path = path;
-    goto again;
-  }
-  free(mem);
-  return MHD_CONTENT_READER_END_OF_STREAM;
+  return count;
 }
 
 struct write_blocks_state {
@@ -312,40 +176,7 @@ static int dh(void *cls, struct MHD_Connection *connection,
   int status_code = MHD_HTTP_NOT_IMPLEMENTED;
 
   if( strcmp(method, MHD_HTTP_METHOD_GET) == 0 ) {
-    struct read_blocks_state *s;
-
-    s = malloc(sizeof(*s));
-    if( NULL == s ) {
-      status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
-      goto err;
-    }
-    memset(s, 0, sizeof(*s));
-    s->fd = -1;
-    copy_path_elem(url, &s->e_hnk);
-    if( NULL == s->e_hnk || strlen(s->e_hnk) < 3 || '.' == s->e_hnk[0] ) {
-      free_read_blocks_state(s);
-      status_code = MHD_HTTP_NOT_FOUND;
-      goto err;
-    }
-    s->server_path = strdup(g_storage_root);
-    s->server_dir = opendir(s->server_path);
-    if( NULL == s->server_dir ) {
-      free_read_blocks_state(s);
-      status_code = MHD_HTTP_NOT_FOUND;
-      goto err;
-    }
-    // Do a callback response which looks for matching blocks and sends them
-    // while adding footers which indicate which indexes they were.
-    s->response = MHD_create_response_from_callback(
-      /*       size */ MHD_SIZE_UNKNOWN, 
-      /* block_size */ 64 * 1024,
-      /*        crc */ &read_blocks,
-      /*    crc_cls */ s,
-      /*       crfc */ &free_read_blocks_state);
-    ret = MHD_queue_response(connection, MHD_HTTP_OK, s->response);
-    if( MHD_NO == ret ) {
-      free_read_blocks_state(s);
-    }
+    return handle_get(cls, connection, url);
   } else if( strcmp(method, MHD_HTTP_METHOD_PUT) == 0 ) {
     struct write_blocks_state *s = *con_cls;
     const char *gen;
@@ -400,11 +231,17 @@ write_again:
     s->fd = -1;
     url = copy_path_elem(url, &e_hnk);
     if( NULL == e_hnk || strlen(e_hnk) < 3 || '.' == e_hnk[0] ) {
+      if( NULL != e_hnk ) {
+        free(e_hnk);
+      }
       status_code = MHD_HTTP_BAD_REQUEST;
       goto err;
     }
     copy_path_elem(url, &c_index);
     if( NULL == c_index || strlen(c_index) < 1 || '.' == c_index[0] ) {
+      if( NULL != c_index ) {
+        free(c_index);
+      }
       free(e_hnk);
       status_code = MHD_HTTP_BAD_REQUEST;
       goto err;

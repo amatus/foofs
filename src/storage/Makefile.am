@@ -3,7 +3,9 @@ bin_PROGRAMS = \
 	foofs-storage
 
 foofs_storage_SOURCES = \
-	main.c
+	main.c         \
+	get.c         \
+	storage.h
 
 foofs_storage_LDADD = \
 	$(MHD_LIBS)
