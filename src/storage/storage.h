@@ -1,4 +1,5 @@
 /* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 2; tab-width: 2 -*- */
+/* vim: set expandtab ts=2 sw=2: */
 /*
  * storage.h
  * Copyright (C) David Barksdale 2011 <amatus.amongus@gmail.com>
