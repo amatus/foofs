@@ -1,34 +1,36 @@
 ;;(ns foofs.fuse
 ;;  (:import (com.sun.jna Function)))
-(import '(com.sun.jna Function Memory))
+(import 'com.sun.jna.Function)
 
-(let [_open (Function/getFunction "c" "open" Function/THROW_LAST_ERROR)]
-  (defn jna-open
-    [path flags mode]
-    (.invokeInt _open (to-array [path flags mode]))))
+(defmacro def-jna
+  [f lib fname params]
+  `(let [func# (Function/getFunction ~lib ~fname)]
+     (defn ~f
+       ~params
+       (.invokeInt func# (to-array ~params)))))
 
-(let [_close (Function/getFunction "c" "close" Function/THROW_LAST_ERROR)]
-  (defn jna-close
-    [fd]
-    (.invokeInt _close (to-array [fd]))))
+(defmacro def-jna-errno
+  [f lib fname params]
+  `(let [func# (Function/getFunction ~lib ~fname Function/THROW_LAST_ERROR)]
+     (defn ~f
+       ~params
+       (.invokeInt func# (to-array ~params)))))
 
-(let [_getuid (Function/getFunction "c" "getuid")]
-  (defn jna-getuid
-    []
-    (.invokeInt _getuid (to-array []))))
+(def-jna-errno open "c" "open" [^String path ^Integer flags ^Integer mode])
 
-(let [_getgid (Function/getFunction "c" "getgid")]
-  (defn jna-getgid
-    []
-    (.invokeInt _getgid (to-array []))))
+(def-jna-errno close "c" "close" [^Integer fd])
 
-(let [_mount (Function/getFunction "c" "mount" Function/THROW_LAST_ERROR)]
-  (defn jna-mount
-    [source target filesystemtype mountflags data]
-    (.invokeInt _mount
-                (to-array [source target filesystemtype mountflags data]))))
+(def-jna getuid "c" "getuid" [])
 
-(def fd (jna-open "/dev/fuse" 0100002 0))
+(def-jna getgid "c" "getgid" [])
 
-(jna-mount "foofs" "/mnt" "fuse.foofs" (Integer. 7)
+(def-jna-errno mount "c" "mount" [^String source
+                                  ^String target
+                                  ^String filesystemtype
+                                  ^Integer mountflags
+                                  ^String data])
+
+(def fd (open "/dev/fuse" 0100002 0))
+
+(mount "foofs" "/mnt" "fuse.foofs" 7
   (str "fd=" fd ",rootmode=40000,user_id=0,group_id=0"))
