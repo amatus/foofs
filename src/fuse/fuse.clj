@@ -41,23 +41,21 @@
 (def-jna-errno waitpid "c" "waitpid" [^Integer pid
                                       ^IntByReference stat_loc
                                       ^Integer options])
-                                        
 
 (def fd (open "/dev/fuse" 0100002 0))
 
 ;;(mount "foofs" "/mnt" "fuse.foofs" 7
 ;;  (str "fd=" fd ",rootmode=40000,user_id=0,group_id=0"))
 
-(def argv (StringArray. (doto (make-array String 3)
-                          (aset 0 "/usr/sbin/mount_fusefs")
-                          (aset 1 (str fd))
-                          (aset 2 "/mnt"))))
-(def envp (StringArray. (doto (make-array String 2)
-                          (aset 0 "MOUNT_FUSEFS_SAFE=1")
-                          (aset 1 "MOUNT_FUSEFS_CALL_BY_LIB=1"))))
 (def pid (IntByReference.))
 
-(posix_spawn pid "/usr/sbin/mount_fusefs" nil nil argv envp)
+(posix_spawn
+  pid
+  "/usr/sbin/mount_fusefs"
+  nil
+  nil
+  (into-array ["mount_fusefs" (str fd) "/mnt"])
+  (into-array ["MOUNT_FUSEFS_SAFE=1" "MOUNT_FUSEFS_CALL_BY_LIB=1"]))
 
 (def stat_loc (IntByReference.))
 
