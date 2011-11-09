@@ -1,6 +1,6 @@
 ;;(ns foofs.fuse
 ;;  (:import (com.sun.jna Function)))
-(import '(com.sun.jna Function NativeLong Pointer StringArray)
+(import '(com.sun.jna Function Memory NativeLong Pointer StringArray)
         'com.sun.jna.ptr.IntByReference)
 
 (defmacro assert-args [fnname & pairs]
@@ -93,6 +93,21 @@
     (instance? IntByReference stat_loc) "stat_loc is an IntByReference"
     (integer? options) "options is an integer")
   [pid stat_loc options])
+
+(defn mem-seq
+  [mem]
+  (map #(.getByte mem %) (range 0 (.size mem))))
+
+(defn read-loop!
+  [fd]
+  (try
+    (let [buf (Memory. 0x21000)
+          ret (c-read fd buf (.size buf))]
+      (.write *out* (str "read " (take ret (mem-seq buf))))
+      )
+    (recur fd)
+    (catch Exception e
+      nil)))
 
 (def fd (open "/dev/fuse" 0100002 0))
 
