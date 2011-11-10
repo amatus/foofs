@@ -103,8 +103,9 @@
   (try
     (let [buf (Memory. 0x21000)
           ret (c-read fd buf (.size buf))]
-      (.write *out* (str "read " (take ret (mem-seq buf))))
-      )
+      ;; There should be a threshold under which we copy the memory instead
+      ;; of holding onto a reference via the mem-seq.
+      (.write *out* (str "read " (take ret (mem-seq buf)))))
     (recur fd)
     (catch Exception e
       nil)))
