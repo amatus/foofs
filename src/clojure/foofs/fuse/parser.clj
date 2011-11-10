@@ -1,35 +1,18 @@
 (ns foofs.fuse.parser
   (:use clojure.contrib.monads))
 
-(defmonad buffer-parser-m
-  "Monad for parsing java.nio.ByteBuffer and the like. It is a parsers
-  responsability to make a duplicate of the buffer before mutating it."
-  [m-result (fn m-result-buffer-parser [v]
-              (fn [buffer] [v (.duplicate buffer)]))
-   m-bind   (fn m-bind-buffer-parser [parser f]
-              (fn [buffer]
-                (let [result (parser buffer)]
-                  (if (nil? result)
-                    nil
-                    (let [[v buffer2] result]
-                      ((f v) buffer2))))))
-   m-zero   (fn m-zero-buffer-parser [buffer]
-              nil)
-   m-plus   (fn m-plus-buffer-parser [& parsers]
-              (fn [buffer]
-                (first
-                  (drop-while nil? (map #(% buffer) parsers)))))])
+(def parser-m (state-t maybe-m))
 
-(defn buffer-parser-m-until
-  "An optimized implementation of m-until for the buffer-parser monad that
+(defn parser-m-until
+  "An optimized implementation of m-until for the parser monad that
    replaces recursion by a loop."
   [p f x]
-  (letfn [(until [p f x buffer]
+  (letfn [(until [p f x s]
             (if (p x)
-              [x buffer]
-              (when-let [xs ((f x) buffer)]
+              [x s]
+              (when-let [xs ((f x) s)]
                 (recur p f (first xs) (second xs)))))]
-    (fn [buffer] (until p f x buffer))))
+    (fn [s] (until p f x s))))
 
 (defn parse-int32
   [buffer]
@@ -58,7 +41,7 @@
       [(.and (biginteger 0xffffffffffffffff) (biginteger (.getLong buffer2)))
        buffer2])))
 
-(with-monad buffer-parser-m
+(with-monad parser-m
 
   (defn optional
     "Makes a parser optional."
@@ -68,14 +51,14 @@
   (defn none-or-more
     "Makes a parser repeat none or more times."
     [parser]
-    (fn [buffer]
-      (let [xs ((buffer-parser-m-until
+    (fn [s]
+      (let [xs ((parser-m-until
                       first
-                      #(fn [buffer]
-                         (if-let [x (parser buffer)]
+                      #(fn [s]
+                         (if-let [x (parser s)]
                            [[false (conj (second %) (first x))] (second x)]
-                           [[true (second %)] buffer]))
-                      [false []]) buffer)]
+                           [[true (second %)] s]))
+                      [false []]) s)]
         [(second (first xs)) (second xs)])))
 
   (defn one-or-more
@@ -89,13 +72,13 @@
   (defn n-times
     "Makes a parser repeat exactly n times."
     [parser n]
-    (fn [buffer]
-      (when-let [xs ((buffer-parser-m-until
+    (fn [s]
+      (when-let [xs ((parser-m-until
                       #(<= n (first %))
-                      #(fn [buffer]
-                         (when-let [xs (parser buffer)]
+                      #(fn [s]
+                         (when-let [xs (parser s)]
                            [[(inc (first %)) (conj (second %) (first xs))]
                             (second xs)]))
-                      [0 []]) buffer)]
+                      [0 []]) s)]
         [(second (first xs)) (second xs)])))
 )
