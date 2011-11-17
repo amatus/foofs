@@ -30,3 +30,17 @@
       [(.and (biginteger 0xffffffffffffffff) (biginteger (.getLong buffer2)))
        buffer2])))
 
+(defn write-int16
+  [x]
+  (fn write-int16-m
+    [buffer]
+    (.putShort buffer x)
+    nil))
+
+(defn write-int32
+  [x]
+  (fn write-int32-m
+    [buffer]
+    (.putInt buffer x)
+    nil))
+

@@ -79,3 +79,14 @@
      flags parse-opaque32]
     (init-in. major minor max-readahead flags)))
 
+(defn write-init-out
+  [init-out]
+  (domonad state-m
+    [_ (format-int32 (:major init-out))
+     _ (format-int32 (:minor init-out))
+     _ (format-int32 (:max-readahead init-out))
+     _ (format-int16 (:max-background init-out))
+     _ (format-int16 (:congestion-threshold init-out))
+     _ (format-int32 (:max-write init-out))]
+    nil))
+
