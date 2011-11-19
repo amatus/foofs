@@ -45,31 +45,30 @@
 
 (defrecord in-header
   [^long len
-   ^long opcode
+   ^int opcode
    ^long unique
    ^long nodeid
-   ^long uid
-   ^long gid
-   ^long pid
-   ^long padding])
+   ^int uid
+   ^int gid
+   ^int pid])
 
 (def parse-in-header
   (domonad parser-m
     [len parse-uint32
-     opcode parse-uint32
+     opcode parse-opaque32
      unique parse-opaque64
      nodeid parse-opaque64
-     uid parse-uint32
-     gid parse-uint32
-     pid parse-uint32
-     padding parse-uint32]
-    (in-header. len opcode unique nodeid uid gid pid padding)))
+     uid parse-opaque32
+     gid parse-opaque32
+     pid parse-opaque32
+     _ (skip 4)]
+    (in-header. len opcode unique nodeid uid gid pid)))
 
 (defrecord init-in
   [^long major
    ^long minor
    ^long max-readahead
-   ^long flags])
+   ^int flags])
 
 (def parse-init-in
   (domonad parser-m

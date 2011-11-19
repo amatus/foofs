@@ -30,6 +30,14 @@
       [(.and (biginteger 0xffffffffffffffff) (biginteger (.getLong buffer2)))
        buffer2])))
 
+(defn skip
+  [x]
+  (fn parse-skip
+    [buffer]
+    (let [position (.position buffer)
+          buffer2 (.duplicate buffer)]
+      [nil (.position buffer2 (+ x position))])))
+
 (defn write-int16
   [x]
   (fn write-int16!
