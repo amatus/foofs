@@ -95,6 +95,13 @@
   [buf]
   (domonad maybe-m
     [in (first (parse-in-header buf))
-     :let [op (ops (:opcode in))]
-     _ (if (nil? op) (reply-error ENOSYS) :nop)]))
+     :let [opcode (:opcode in)
+           op (ops opcode)]
+     _ (if (nil? op)
+         (do (reply-error ENOSYS) nil)
+         :nop)
+     _ (if (== op-interrupt opcode)
+         :nop
+         (do (check-interrupt in) :nop))
+     _ (op in)]))
 
