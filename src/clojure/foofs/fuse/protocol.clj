@@ -82,11 +82,20 @@
 (defn write-init-out
   [init-out]
   (domonad state-m
-    [_ (format-int32 (:major init-out))
-     _ (format-int32 (:minor init-out))
-     _ (format-int32 (:max-readahead init-out))
-     _ (format-int16 (:max-background init-out))
-     _ (format-int16 (:congestion-threshold init-out))
-     _ (format-int32 (:max-write init-out))]
+    [_ (write-int32 (:major init-out))
+     _ (write-int32 (:minor init-out))
+     _ (write-int32 (:max-readahead init-out))
+     _ (write-int16 (:max-background init-out))
+     _ (write-int16 (:congestion-threshold init-out))
+     _ (write-int32 (:max-write init-out))]
     nil))
+
+(def ops {})
+
+(defn process-buf
+  [buf]
+  (domonad maybe-m
+    [in (first (parse-in-header buf))
+     :let [op (ops (:opcode in))]
+     _ (if (nil? op) (reply-error ENOSYS) :nop)]))
 

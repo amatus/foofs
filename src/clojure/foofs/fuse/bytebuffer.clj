@@ -32,14 +32,14 @@
 
 (defn write-int16
   [x]
-  (fn write-int16-m
+  (fn write-int16!
     [buffer]
     (.putShort buffer x)
     nil))
 
 (defn write-int32
   [x]
-  (fn write-int32-m
+  (fn write-int32!
     [buffer]
     (.putInt buffer x)
     nil))
