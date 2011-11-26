@@ -92,7 +92,7 @@
 (def ops {})
 
 (defn process-buf
-  [buf]
+  [filesystem buf]
   (domonad maybe-m
     [in (first (parse-in-header buf))
      :let [opcode (:opcode in)

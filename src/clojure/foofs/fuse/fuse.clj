@@ -99,34 +99,40 @@
   (map #(.getByte mem %) (range 0 (.size mem))))
 
 (defn read-loop!
-  [fd]
+  [filesystem fd]
   (try
     (let [buf (Memory. 0x21000)
           ret (c-read fd buf (.size buf))]
-      ;; There should be a threshold under which we copy the memory instead
-      ;; of holding onto a reference via the mem-seq.
-      (.write *out* (str "read " (take ret (mem-seq buf)))))
+      (process-buf filesystem (.getByteBuffer buf 0 ret))
     (recur fd)
     (catch Exception e
       nil)))
 
-(def fd (open "/dev/fuse" 0100002 0))
+(defprotocol Filesystem
+  "A FUSE filesystem."
+  (getattr [path] "Get file attributes.")
+  (readlink [path] "Read the target of a symbolic link.")
+  ;; and so on
+  )
 
-;;(mount "foofs" "/mnt" "fuse.foofs" 7
-;;  (str "fd=" fd ",rootmode=40000,user_id=0,group_id=0"))
+(defn freebsd-mount
+  [filesystem mountpoint]
+  (try
+    (let [fd (open "/dev/fuse" 0100002 0)
+          pid (IntByReference.)
+          ret (posix_spawn pid "/usr/sbin/mount_fusefs" nil nil
+                           ["mount_fusefs" (str fd) mountpoint]
+                           ["MOUNT_FUSEFS_SAFE=1"
+                            "MOUNT_FUSEFS_CALL_BY_LIB=1"])]
+      (if (== 0 ret)
+        (let [stat_loc (IntByReference.)]
+          (waitpid (.getValue pid) stat_loc 0)
+          (if (0 == (.getValue stat_loc))
+            (let [read-thread (Thread. (partial read-loop! filesystem fd))]
+              (.start read-thread)
+              nil)
+            (close fd)))
+        (close fd)))
+    (catch Exception e
+      nil)))
 
-(def pid (IntByReference.))
-
-(posix_spawn
-  pid
-  "/usr/sbin/mount_fusefs"
-  nil
-  nil
-  ["mount_fusefs" (str fd) "/mnt"]
-  ["MOUNT_FUSEFS_SAFE=1" "MOUNT_FUSEFS_CALL_BY_LIB=1"])
-
-(def stat_loc (IntByReference.))
-
-(waitpid (.getValue pid) stat_loc 0)
-
-(close fd)
