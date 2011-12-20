@@ -34,7 +34,7 @@
       (if (== 0 ret)
         (let [stat_loc (IntByReference.)]
           (waitpid (.getValue pid) stat_loc 0)
-          (if (0 == (.getValue stat_loc))
+          (if (== 0 (.getValue stat_loc))
             (let [read-thread (Thread. (partial read-loop! filesystem fd))]
               (.start read-thread)
               nil)
