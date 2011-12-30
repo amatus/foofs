@@ -46,6 +46,41 @@
 (def op-notify-reply 41)
 (def op-batch-forget 42)
 
+(defn write-out-header
+  [out]
+  (domonad state-m
+    [_ (write-int32 (:len out))
+     _ (write-int32 (:error out))
+     _ (write-int64 (:unique out))]
+    nil))
+
+(def out-header-len 16)
+
+(defn send-reply
+  [fuse request error reply]
+  (let [mem (Memory. 0x21000)
+        buf (.getByteBuffer mem 0 (.size mem))]
+    (.clear buf)
+    (.position buf out-header-len)
+    (reply buf)
+    (.flip buf)
+    ((write-out-header {:len (.limit buf)
+                        :error error
+                        :unique (:unique request)})
+       buf)
+    (try
+      (let [ret (write (:fd fuse) mem (.limit buf))]
+        )
+      (catch Exception e nil))))
+
+(defn reply-error
+  [fuse request error]
+  (send-reply fuse request error (with-monad state-m m-zero)))
+
+(defn reply-ok
+  [fuse request reply]
+  (send-reply fuse request 0 reply))
+
 (defrecord in-header
   [^long len
    ^int opcode
@@ -92,32 +127,29 @@
      _ (write-int32 (:max-write init-out))]
     nil))
 
-(def init-out-size 20) ;; this sucks
-
 (defn process-init!
   [fuse request arg]
   (domonad
     maybe-m
     [init (let [init (first (parse-init-in))]
             (if (nil? init)
-              (do (reply-error EBADMSG) nil)
+              (do (reply-error fuse request EBADMSG) nil)
               init))
      :let [connection (:connection fuse)]
      :let [_ (reset! (:proto-major connection) (:major init))]
      :let [_ (reset! (:proto-minor connection) (:minor init))]
      _ (if (> fuse-version-major (:major init))
-         (do (reply-error EPROTO) nil)
+         (do (reply-error fuse request EPROTO) nil)
          :nop)
      _ (if (< fuse-version-major (:major init))
          ;; kernel is too new, tell it we want to talk at an earlier version
-         (let [buf (ByteBuffer/allocate init-out-size)]
-           ((write-init-out {:major fuse-version-major
-                             :minor fuse-version-minor
-                             :max-readahead 0
-                             :max-background 0
-                             :congestion-threshold 0
-                             :max-write 0}) buf)
-           (reply-ok buf))
+         (reply-ok fuse request
+           (write-init-out {:major fuse-version-major
+                            :minor fuse-version-minor
+                            :max-readahead 0
+                            :max-background 0
+                            :congestion-threshold 0
+                            :max-write 0}))
          :nop)
      ]))
 
@@ -129,10 +161,11 @@
   [fuse buf]
   (domonad maybe-m
     [[request arg] (parse-in-header buf)
+     ;; TODO: do something with in-header.len?
      :let [opcode (:opcode request)
            op (ops opcode)]
      _ (if (nil? op)
-         (do (reply-error ENOSYS) nil)
+         (do (reply-error fuse request ENOSYS) nil)
          :nop)
      _ (op fuse request arg)]))
 

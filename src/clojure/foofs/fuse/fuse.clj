@@ -8,6 +8,7 @@
 (defn read-loop!
   [filesystem fd]
   (let [fuse {:filesystem filesystem
+              :fd fd
               :connection {:proto-major (atom 0)
                            :proto-minor (atom 0)
                            :cap-async-read (atom false)
@@ -18,8 +19,8 @@
                            :cap-dont-mask (atom false)
                            :cap-flock-locks (atom false)}}]
     (try
-      (let [buf (Memory. 0x21000)
-            ret (c-read fd buf (.size buf))] 
+      (let [mem (Memory. 0x21000)
+            ret (c-read fd mem (.size mem))] 
         (process-buf fuse (.getByteBuffer buf 0 ret)))
       (recur fd)
       (catch Exception e nil)))

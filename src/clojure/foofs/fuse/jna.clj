@@ -50,12 +50,20 @@
   [(int32_t fd)])
 
 (def-jna c-read ["c" "read" Function/THROW_LAST_ERROR]
-  [fd buf nbyte]
+  [fd buf nbytes]
   (assert-args c-read 
     (integer? fd) "fd is an integer"
     (pointer? buf) "buf is a pointer"
-    (integer? nbyte) "nbyte is an integer")
-  [(int32_t fd) buf (size_t nbyte)])
+    (integer? nbytes) "nbytes is an integer")
+  [(int32_t fd) buf (size_t nbytes)])
+
+(def-jna write ["c" "write" Function/THROW_LAST_ERROR]
+  [fd buf nbytes]
+  (assert-args write
+    (integer? fd) "fd is an integer"
+    (pointer? buf) "buf is a pointer"
+    (integer? nbytes) "nbytes is an integer")
+  [(int32_t fd) buf (size_t nbytes)])
 
 (def-jna getuid ["c" "getuid"]
   [])
