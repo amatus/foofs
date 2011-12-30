@@ -2,6 +2,9 @@
   (:use (foofs.fuse bytebuffer parser)
         clojure.contrib.monads))
 
+(def fuse-version-major 7)
+(def fuse-version-minor 17)
+
 (def op-lookup       1)
 (def op-forget       2)
 (def op-getattr      3)
@@ -89,19 +92,47 @@
      _ (write-int32 (:max-write init-out))]
     nil))
 
-(def ops {})
+(def init-out-size 20) ;; this sucks
+
+(defn process-init!
+  [fuse request arg]
+  (domonad
+    maybe-m
+    [init (let [init (first (parse-init-in))]
+            (if (nil? init)
+              (do (reply-error EBADMSG) nil)
+              init))
+     :let [connection (:connection fuse)]
+     :let [_ (reset! (:proto-major connection) (:major init))]
+     :let [_ (reset! (:proto-minor connection) (:minor init))]
+     _ (if (> fuse-version-major (:major init))
+         (do (reply-error EPROTO) nil)
+         :nop)
+     _ (if (< fuse-version-major (:major init))
+         ;; kernel is too new, tell it we want to talk at an earlier version
+         (let [buf (ByteBuffer/allocate init-out-size)]
+           ((write-init-out {:major fuse-version-major
+                             :minor fuse-version-minor
+                             :max-readahead 0
+                             :max-background 0
+                             :congestion-threshold 0
+                             :max-write 0}) buf)
+           (reply-ok buf))
+         :nop)
+     ]))
+
+
+(def ops
+  {op-init process-init!})
 
 (defn process-buf
-  [filesystem buf]
+  [fuse buf]
   (domonad maybe-m
-    [in (first (parse-in-header buf))
-     :let [opcode (:opcode in)
+    [[request arg] (parse-in-header buf)
+     :let [opcode (:opcode request)
            op (ops opcode)]
      _ (if (nil? op)
          (do (reply-error ENOSYS) nil)
          :nop)
-     _ (if (== op-interrupt opcode)
-         :nop
-         (do (check-interrupt in) :nop))
-     _ (op in)]))
+     _ (op fuse request arg)]))
 

@@ -7,13 +7,22 @@
 
 (defn read-loop!
   [filesystem fd]
-  (try
-    (let [buf (Memory. 0x21000)
-          ret (c-read fd buf (.size buf))]
-      (process-buf filesystem (.getByteBuffer buf 0 ret))
-    (recur fd)
-    (catch Exception e
-      nil)))
+  (let [fuse {:filesystem filesystem
+              :connection {:proto-major (atom 0)
+                           :proto-minor (atom 0)
+                           :cap-async-read (atom false)
+                           :cap-posix-locks (atom false)
+                           :cap-atomic-o-trunc (atom false)
+                           :cap-export-support (atom false)
+                           :cap-big-writes (atom false)
+                           :cap-dont-mask (atom false)
+                           :cap-flock-locks (atom false)}}]
+    (try
+      (let [buf (Memory. 0x21000)
+            ret (c-read fd buf (.size buf))] 
+        (process-buf fuse (.getByteBuffer buf 0 ret)))
+      (recur fd)
+      (catch Exception e nil)))
 
 (defprotocol Filesystem
   "A FUSE filesystem."
