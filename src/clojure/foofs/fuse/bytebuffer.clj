@@ -50,3 +50,8 @@
     [buffer]
     [nil (.putInt buffer x)]))
 
+(defn write-int64
+  [x]
+  (fn write-int64!
+    [buffer]
+    [nil (.putLong buffer x)]))

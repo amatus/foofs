@@ -1,5 +1,7 @@
 (ns foofs.fuse.fuse
-  (:use (foofs.fuse jna protocol)))
+  (:use (foofs.fuse jna protocol))
+  (:import com.sun.jna.Memory
+           com.sun.jna.ptr.IntByReference))
 
 (defn mem-seq
   [mem]
@@ -10,25 +12,23 @@
   (let [fuse {:filesystem filesystem
               :fd fd
               :connection {:proto-major (atom 0)
-                           :proto-minor (atom 0)
-                           :cap-async-read (atom false)
-                           :cap-posix-locks (atom false)
-                           :cap-atomic-o-trunc (atom false)
-                           :cap-export-support (atom false)
-                           :cap-big-writes (atom false)
-                           :cap-dont-mask (atom false)
-                           :cap-flock-locks (atom false)}}]
-    (try
-      (let [mem (Memory. 0x21000)
-            ret (c-read fd mem (.size mem))] 
-        (process-buf fuse (.getByteBuffer buf 0 ret)))
-      (recur fd)
-      (catch Exception e nil)))
+                           :proto-minor (atom 0)}}]
+    (when
+      (try
+        (let [mem (Memory. 0x21000)
+              ret (c-read fd mem (.size mem))] 
+          (process-buf fuse (.getByteBuffer mem 0 ret)))
+        true
+        (catch Exception e
+          (.printStackTrace e)
+          false))
+      (recur filesystem fd))))
 
 (defprotocol Filesystem
   "A FUSE filesystem."
-  (getattr [path] "Get file attributes.")
-  (readlink [path] "Read the target of a symbolic link.")
+  ;;(getattr [self path] "Get file attributes.")
+  ;;(readlink [self path] "Read the target of a symbolic link.")
+  (init [self] "Initialize filesystem.")
   ;; and so on
   )
 
@@ -46,10 +46,12 @@
           (waitpid (.getValue pid) stat_loc 0)
           (if (== 0 (.getValue stat_loc))
             (let [read-thread (Thread. (partial read-loop! filesystem fd))]
+              (.write *out* "Starting read thread\n")
               (.start read-thread)
               nil)
             (close fd)))
         (close fd)))
     (catch Exception e
+      (.printStackTrace e)
       nil)))
 

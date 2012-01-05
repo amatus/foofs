@@ -1,6 +1,7 @@
 (ns foofs.fuse.protocol
-  (:use (foofs.fuse bytebuffer parser)
-        clojure.contrib.monads))
+  (:use (foofs.fuse bytebuffer jna parser)
+        clojure.contrib.monads)
+  (:import com.sun.jna.Memory))
 
 (def fuse-version-major 7)
 (def fuse-version-minor 17)
@@ -69,9 +70,10 @@
                         :unique (:unique request)})
        buf)
     (try
-      (let [ret (write (:fd fuse) mem (.limit buf))]
+      (let [ret (c-write (:fd fuse) mem (.limit buf))]
         )
-      (catch Exception e nil))))
+      (catch Exception e nil)))
+  nil)
 
 (defn reply-error
   [fuse request error]
@@ -122,6 +124,7 @@
     [_ (write-int32 (:major init-out))
      _ (write-int32 (:minor init-out))
      _ (write-int32 (:max-readahead init-out))
+     _ (write-int32 (:flags init-out))
      _ (write-int16 (:max-background init-out))
      _ (write-int16 (:congestion-threshold init-out))
      _ (write-int32 (:max-write init-out))]
@@ -131,15 +134,18 @@
   [fuse request arg]
   (domonad
     maybe-m
-    [init (let [init (first (parse-init-in))]
-            (if (nil? init)
-              (do (reply-error fuse request EBADMSG) nil)
-              init))
+    [:let [init (first ((parse-init-in) arg))]
+     _ (if (nil? init)
+         (reply-error fuse request errno-inval)
+         :nop)
      :let [connection (:connection fuse)]
-     :let [_ (reset! (:proto-major connection) (:major init))]
-     :let [_ (reset! (:proto-minor connection) (:minor init))]
+     _ (do
+         (reset! (:proto-major connection) (:major init))
+         (reset! (:proto-minor connection) (:minor init))
+         :nop)
      _ (if (> fuse-version-major (:major init))
-         (do (reply-error fuse request EPROTO) nil)
+         ;; kernel is too old, give up
+         (reply-error fuse request errno-proto)
          :nop)
      _ (if (< fuse-version-major (:major init))
          ;; kernel is too new, tell it we want to talk at an earlier version
@@ -147,12 +153,23 @@
            (write-init-out {:major fuse-version-major
                             :minor fuse-version-minor
                             :max-readahead 0
+                            :flags 0
                             :max-background 0
                             :congestion-threshold 0
                             :max-write 0}))
          :nop)
-     ]))
-
+     _ (do
+         (.init (:filesystem fuse))
+         (reply-ok fuse request
+           (write-init-out {:major fuse-version-major
+                            :minor fuse-version-minor
+                            :max-readahead (:max-readahead init)
+                            :flags 0
+                            :max-background 0
+                            :congestion-threshold 0
+                            :max-write 0x21000}))
+         :nop)
+     ] nil))
 
 (def ops
   {op-init process-init!})
@@ -165,7 +182,7 @@
      :let [opcode (:opcode request)
            op (ops opcode)]
      _ (if (nil? op)
-         (do (reply-error fuse request ENOSYS) nil)
+         (do (reply-error fuse request errno-nosys) nil)
          :nop)
-     _ (op fuse request arg)]))
+     _ (op fuse request arg)] nil))
 

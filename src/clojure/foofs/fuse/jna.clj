@@ -1,5 +1,5 @@
 (ns foofs.fuse.jna
-  (:import (com.sun.jna Function Memory NativeLong Pointer StringArray)
+  (:import (com.sun.jna Function Memory NativeLong Platform Pointer StringArray)
            com.sun.jna.ptr.IntByReference))
 
 (defmacro assert-args [fnname & pairs]
@@ -57,9 +57,9 @@
     (integer? nbytes) "nbytes is an integer")
   [(int32_t fd) buf (size_t nbytes)])
 
-(def-jna write ["c" "write" Function/THROW_LAST_ERROR]
+(def-jna c-write ["c" "write" Function/THROW_LAST_ERROR]
   [fd buf nbytes]
-  (assert-args write
+  (assert-args c-write
     (integer? fd) "fd is an integer"
     (pointer? buf) "buf is a pointer"
     (integer? nbytes) "nbytes is an integer")
@@ -101,3 +101,14 @@
     (integer? options) "options is an integer")
   [pid stat_loc options])
 
+(when (Platform/isLinux)
+  (do
+    (def errno-inval 22)
+    (def errno-nosys 38)
+    (def errno-proto 71)))
+
+(when (Platform/isFreeBSD)
+  (do
+    (def errno-inval 22)
+    (def errno-nosys 78)
+    (def errno-proto 92)))
