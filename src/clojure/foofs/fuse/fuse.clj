@@ -32,6 +32,10 @@
   ;; and so on
   )
 
+(def test-fs
+  (reify Filesystem
+    (init [this] (.write *out* "init called.\n"))))
+
 (defn freebsd-mount
   [filesystem mountpoint]
   (try
