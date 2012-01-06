@@ -5,6 +5,7 @@
   [buffer]
   (when (<= 4 (.remaining buffer))
     (let [buffer2 (.duplicate buffer)]
+      (.order buffer2 (.order buffer)) ;; this is a damn shame right here
       [(.getInt buffer2) buffer2])))
 
 (def parse-opaque32 parse-int32)
@@ -13,12 +14,14 @@
   [buffer]
   (when (<= 4 (.remaining buffer))
     (let [buffer2 (.duplicate buffer)]
+      (.order buffer2 (.order buffer))
       [(bit-and 0xffffffff (.getInt buffer2)) buffer2])))
 
 (defn parse-int64
   [buffer]
   (when (<= 8 (.remaining buffer))
     (let [buffer2 (.duplicate buffer)]
+      (.order buffer2 (.order buffer))
       [(.getLong buffer2) buffer2])))
 
 (def parse-opaque64 parse-int64)
@@ -27,6 +30,7 @@
   [buffer]
   (when (<= 8 (.remaining buffer))
     (let [buffer2 (.duplicate buffer)]
+      (.order buffer2 (.order buffer))
       [(.and (biginteger 0xffffffffffffffff) (biginteger (.getLong buffer2)))
        buffer2])))
 
@@ -36,6 +40,7 @@
     [buffer]
     (let [position (.position buffer)
           buffer2 (.duplicate buffer)]
+      (.order buffer2 (.order buffer))
       [nil (.position buffer2 (+ x position))])))
 
 (defn write-int16
