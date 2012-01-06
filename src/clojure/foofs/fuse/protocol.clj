@@ -134,7 +134,7 @@
   [fuse request arg]
   (domonad
     maybe-m
-    [:let [init (first ((parse-init-in) arg))]
+    [:let [init (first (parse-init-in arg))]
      _ (if (nil? init)
          (reply-error fuse request errno-inval)
          :nop)
