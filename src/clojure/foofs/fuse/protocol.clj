@@ -4,7 +4,8 @@
   (:import com.sun.jna.Memory))
 
 (def fuse-version-major 7)
-(def fuse-version-minor 17)
+(def fuse-version-minor 8)
+(def fuse-root-id 1)
 
 (def op-lookup       1)
 (def op-forget       2)
@@ -104,6 +105,66 @@
      _ (skip 4)]
     (in-header. len opcode unique nodeid uid gid pid)))
 
+(defrecord fuse-attr
+  [^long inode
+   ^BigInteger size
+   ^BigInteger blocks
+   ^long atime
+   ^long mtime
+   ^long ctime
+   ^long atimensec
+   ^long mtimensec
+   ^long ctimensec
+   ^int mode
+   ^long nlink
+   ^int uid
+   ^int gid
+   ^int rdev])
+
+(defn write-fuse-attr
+  [attr]
+  (domonad
+    state-m
+    [_ (write-int64 (:inode attr))
+     _ (write-int64 (:size attr))
+     _ (write-int64 (:blocks attr))
+     _ (write-int64 (:atime attr))
+     _ (write-int64 (:mtime attr))
+     _ (write-int64 (:ctime attr))
+     _ (write-int32 (:atimensec attr))
+     _ (write-int32 (:mtimensec attr))
+     _ (write-int32 (:ctimensec attr))
+     _ (write-int32 (:mode attr))
+     _ (write-int32 (:nlink attr))
+     _ (write-int32 (:uid attr))
+     _ (write-int32 (:gid attr))
+     _ (write-int32 (:rdev attr))]
+    nil))
+
+(defn write-attr-out
+  [valid valid-nsec]
+  (domonad
+    state-m
+    [_ (write-int64 valid)
+     _ (write-int32 valid-nsec)
+     _ (write-int32 0)]
+    nil))
+
+(defn process-getattr!
+  [fuse request arg]
+  (let [result (.getattr (:filesystem fuse) request)]
+    (cond 
+     (instance? fuse-attr result) (reply-ok
+                                    fuse
+                                    request
+                                    (domonad
+                                      state-m
+                                      [_ (write-attr-out 0 0)
+                                       _ (write-fuse-attr result)]
+                                      nil))
+      (integer? result) (reply-error fuse request result)
+      true (reply-error fuse request errno-nosys))))
+
 (defrecord init-in
   [^long major
    ^long minor
@@ -159,7 +220,7 @@
                             :max-write 0}))
          :nop)
      _ (do
-         (.init (:filesystem fuse))
+         (.init (:filesystem fuse) request)
          (reply-ok fuse request
            (write-init-out {:major fuse-version-major
                             :minor fuse-version-minor
@@ -172,7 +233,8 @@
      ] nil))
 
 (def ops
-  {op-init process-init!})
+  {op-getattr process-getattr!
+   op-init process-init!})
 
 (defn process-buf
   [fuse buf]
@@ -182,7 +244,10 @@
      :let [opcode (:opcode request)
            op (ops opcode)]
      _ (if (nil? op)
-         (do (reply-error fuse request errno-nosys) nil)
+         (do
+           (.write *out* (str "No op for " opcode "\n"))
+           (reply-error fuse request errno-nosys)
+           nil)
          :nop)
      _ (op fuse request arg)] nil))
 

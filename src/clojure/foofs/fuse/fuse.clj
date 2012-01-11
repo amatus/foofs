@@ -17,15 +17,17 @@
 
 (defprotocol Filesystem
   "A FUSE filesystem."
-  ;;(getattr [self path] "Get file attributes.")
-  ;;(readlink [self path] "Read the target of a symbolic link.")
-  (init [self] "Initialize filesystem.")
+  (init [this request] "Initialize filesystem.")
+  (getattr [this request] "Get file attributes.")
   ;; and so on
   )
 
 (def test-fs
   (reify Filesystem
-    (init [this] (.write *out* "init called.\n"))))
+    (init [this request]
+      (.write *out* "init called.\n"))
+    (getattr [this request]
+      (foofs.fuse.protocol.fuse-attr. 0 0 0 0 0 0 0 0 0 040000 1 0 0 0))))
 
 (defn freebsd-mount
   [filesystem mountpoint]
