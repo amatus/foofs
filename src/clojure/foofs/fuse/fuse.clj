@@ -8,21 +8,16 @@
   (map #(.getByte mem %) (range 0 (.size mem))))
 
 (defn read-loop!
-  [filesystem fd]
-  (let [fuse {:filesystem filesystem
-              :fd fd
-              :connection {:proto-major (atom 0)
-                           :proto-minor (atom 0)}}]
-    (when
-      (try
+  [fuse]
+  (let [fd (:fd fuse)]
+    (try
+      (loop []
         (let [mem (Memory. 0x21000)
               ret (c-read fd mem (.size mem))] 
           (process-buf fuse (.getByteBuffer mem 0 ret)))
-        true
-        (catch Exception e
-          (.printStackTrace e)
-          false))
-      (recur filesystem fd))))
+          (recur))
+      (catch Exception e
+        (.printStackTrace e)))))
 
 (defprotocol Filesystem
   "A FUSE filesystem."
@@ -49,10 +44,15 @@
         (let [stat_loc (IntByReference.)]
           (waitpid (.getValue pid) stat_loc 0)
           (if (== 0 (.getValue stat_loc))
-            (let [read-thread (Thread. (partial read-loop! filesystem fd))]
-              (.write *out* "Starting read thread\n")
+            (let [fuse {:filesystem filesystem
+                        :fd fd
+                        :read-thread (atom nil)
+                        :connection {:proto-major (atom 0)
+                                     :proto-minor (atom 0)}}
+                  read-thread (Thread. (partial read-loop! fuse))]
+              (reset! (:read-thread fuse) read-thread)
               (.start read-thread)
-              nil)
+              fuse)
             (close fd)))
         (close fd)))
     (catch Exception e
