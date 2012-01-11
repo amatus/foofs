@@ -3,10 +3,6 @@
   (:import com.sun.jna.Memory
            com.sun.jna.ptr.IntByReference))
 
-(defn mem-seq
-  [mem]
-  (map #(.getByte mem %) (range 0 (.size mem))))
-
 (defn read-loop!
   [fuse]
   (let [fd (:fd fuse)]
