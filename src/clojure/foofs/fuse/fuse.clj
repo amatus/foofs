@@ -10,7 +10,7 @@
       (loop []
         (let [mem (Memory. 0x21000)
               ret (c-read fd mem (.size mem))] 
-          (process-buf fuse (.getByteBuffer mem 0 ret)))
+          (process-buf! fuse (.getByteBuffer mem 0 ret)))
           (recur))
       (catch Exception e
         (.printStackTrace e)))))
@@ -35,7 +35,8 @@
     (let [fd (open "/dev/fuse" 0100002 0)
           pid (IntByReference.)
           ret (posix_spawn pid "/usr/sbin/mount_fusefs" nil nil
-                           ["mount_fusefs" (str fd) mountpoint]
+                           ["mount_fusefs" "-o" "default_permissions" (str fd)
+                            mountpoint]
                            ["MOUNT_FUSEFS_SAFE=1"
                             "MOUNT_FUSEFS_CALL_BY_LIB=1"])]
       (if (== 0 ret)

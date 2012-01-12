@@ -102,7 +102,7 @@
      uid parse-opaque32
      gid parse-opaque32
      pid parse-opaque32
-     _ (skip 4)]
+     _ skip-32]
     (in-header. len opcode unique nodeid uid gid pid)))
 
 (defrecord fuse-attr
@@ -232,11 +232,22 @@
          :nop)
      ] nil))
 
+(def parse-open-in
+  (domonad parser-m
+    [flags parse-opaque32
+     _ skip-32]
+    flags))
+
+(defn process-opendir!
+  [fuse request arg]
+  )
+
 (def ops
   {op-getattr process-getattr!
-   op-init process-init!})
+   op-init process-init!
+   op-opendir process-opendir!})
 
-(defn process-buf
+(defn process-buf!
   [fuse buf]
   (domonad maybe-m
     [[request arg] (parse-in-header buf)

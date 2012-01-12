@@ -43,6 +43,12 @@
       (.order buffer2 (.order buffer))
       [nil (.position buffer2 (+ x position))])))
 
+(def skip-32
+  (skip 4))
+
+(def skip-64
+  (skip 8))
+
 (defn write-int16
   [x]
   (fn write-int16!
