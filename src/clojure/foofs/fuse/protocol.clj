@@ -58,7 +58,7 @@
 
 (def out-header-len 16)
 
-(defn send-reply
+(defn send-reply!
   [fuse request error reply]
   (let [mem (Memory. 0x21000)
         buf (.getByteBuffer mem 0 (.size mem))]
@@ -76,13 +76,13 @@
       (catch Exception e nil)))
   nil)
 
-(defn reply-error
+(defn reply-error!
   [fuse request error]
-  (send-reply fuse request error (with-monad state-m m-zero)))
+  (send-reply! fuse request error (with-monad state-m m-zero)))
 
-(defn reply-ok
+(defn reply-ok!
   [fuse request reply]
-  (send-reply fuse request 0 reply))
+  (send-reply! fuse request 0 reply))
 
 (defrecord in-header
   [^long len
@@ -147,14 +147,14 @@
     state-m
     [_ (write-int64 valid)
      _ (write-int32 valid-nsec)
-     _ (write-int32 0)]
+     _ (pad 4)]
     nil))
 
 (defn process-getattr!
   [fuse request arg]
   (let [result (.getattr (:filesystem fuse) request)]
     (cond 
-     (instance? fuse-attr result) (reply-ok
+     (instance? fuse-attr result) (reply-ok!
                                     fuse
                                     request
                                     (domonad
@@ -162,8 +162,44 @@
                                       [_ (write-attr-out 0 0)
                                        _ (write-fuse-attr result)]
                                       nil))
-      (integer? result) (reply-error fuse request result)
-      true (reply-error fuse request errno-nosys))))
+      (integer? result) (reply-error! fuse request result)
+      true (reply-error! fuse request errno-nosys))))
+
+(defrecord statfs-out
+  [^BigInteger blocks
+   ^BigInteger bfree
+   ^BigInteger bavail
+   ^BigInteger files
+   ^BigInteger ffree
+   ^long bsize
+   ^long namelen
+   ^long frsize])
+
+(defn write-statfs-out
+  [statfs-out]
+  (domonad
+    state-m
+    [_ (write-int64 (:blocks statfs-out))
+     _ (write-int64 (:bfree statfs-out))
+     _ (write-int64 (:bavail statfs-out))
+     _ (write-int64 (:files statfs-out))
+     _ (write-int64 (:ffree statfs-out))
+     _ (write-int32 (:bsize statfs-out))
+     _ (write-int32 (:namelen statfs-out))
+     _ (write-int32 (:frsize statfs-out))
+     _ (pad 28)]
+    nil))
+ 
+(defn process-statfs!
+  [fuse request arg]
+  (let [result (.statfs (:filesystem fuse) request)]
+    (cond 
+      (instance? statfs-out result) (reply-ok!
+                                      fuse
+                                      request
+                                      (write-statfs-out result))
+      (integer? result) (reply-error! fuse request result)
+      true (reply-error! fuse request errno-nosys))))
 
 (defrecord init-in
   [^long major
@@ -197,7 +233,7 @@
     maybe-m
     [:let [init (first (parse-init-in arg))]
      _ (if (nil? init)
-         (reply-error fuse request errno-inval)
+         (reply-error! fuse request errno-inval)
          :nop)
      :let [connection (:connection fuse)]
      _ (do
@@ -206,11 +242,11 @@
          :nop)
      _ (if (> fuse-version-major (:major init))
          ;; kernel is too old, give up
-         (reply-error fuse request errno-proto)
+         (reply-error! fuse request errno-proto)
          :nop)
      _ (if (< fuse-version-major (:major init))
          ;; kernel is too new, tell it we want to talk at an earlier version
-         (reply-ok fuse request
+         (reply-ok! fuse request
            (write-init-out {:major fuse-version-major
                             :minor fuse-version-minor
                             :max-readahead 0
@@ -221,7 +257,7 @@
          :nop)
      _ (do
          (.init (:filesystem fuse) request)
-         (reply-ok fuse request
+         (reply-ok! fuse request
            (write-init-out {:major fuse-version-major
                             :minor fuse-version-minor
                             :max-readahead (:max-readahead init)
@@ -238,12 +274,36 @@
      _ skip-32]
     flags))
 
+(defrecord open-out
+  [^long handle
+   ^int flags])
+
+(defn write-open-out
+  [open-out]
+  (domonad
+    state-m
+    [_ (write-int64 (:handle open-out))
+     _ (write-int32 (:flags open-out))
+     _ (pad 4)]
+    nil))
+
 (defn process-opendir!
   [fuse request arg]
-  )
+  (let [flags (first (parse-open-in arg))]
+    (if (nil? flags)
+      (reply-error! fuse request errno-inval)
+      (let [result (.opendir (:filesystem fuse) request flags)]
+        (cond 
+          (instance? open-out result) (reply-ok!
+                                        fuse
+                                        request
+                                        (write-open-out result))
+          (integer? result) (reply-error! fuse request result)
+          true (reply-error! fuse request errno-nosys))))))
 
 (def ops
   {op-getattr process-getattr!
+   op-statfs process-statfs!
    op-init process-init!
    op-opendir process-opendir!})
 
@@ -257,7 +317,7 @@
      _ (if (nil? op)
          (do
            (.write *out* (str "No op for " opcode "\n"))
-           (reply-error fuse request errno-nosys)
+           (reply-error! fuse request errno-nosys)
            nil)
          :nop)
      _ (op fuse request arg)] nil))

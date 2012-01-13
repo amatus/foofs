@@ -66,3 +66,10 @@
   (fn write-int64!
     [buffer]
     [nil (.putLong buffer x)]))
+
+(defn pad
+  [x]
+  (fn pad!
+    [buffer]
+    (let [position (.position buffer)]
+      [nil (.position buffer (+ x position))])))
