@@ -84,17 +84,9 @@
   [fuse request reply]
   (send-reply! fuse request 0 reply))
 
-(defrecord in-header
-  [^long len
-   ^int opcode
-   ^long unique
-   ^long nodeid
-   ^int uid
-   ^int gid
-   ^int pid])
-
 (def parse-in-header
-  (domonad parser-m
+  (domonad
+    parser-m
     [len parse-uint32
      opcode parse-opaque32
      unique parse-opaque64
@@ -103,23 +95,13 @@
      gid parse-opaque32
      pid parse-opaque32
      _ skip-32]
-    (in-header. len opcode unique nodeid uid gid pid)))
-
-(defrecord fuse-attr
-  [^long inode
-   ^BigInteger size
-   ^BigInteger blocks
-   ^long atime
-   ^long mtime
-   ^long ctime
-   ^long atimensec
-   ^long mtimensec
-   ^long ctimensec
-   ^int mode
-   ^long nlink
-   ^int uid
-   ^int gid
-   ^int rdev])
+    {:len len
+     :opcode opcode
+     :unique unique
+     :nodeid nodeid
+     :uid uid
+     :gid gid
+     :pid pid}))
 
 (defn write-fuse-attr
   [attr]
@@ -154,26 +136,16 @@
   [fuse request arg]
   (let [result (.getattr (:filesystem fuse) request)]
     (cond 
-     (instance? fuse-attr result) (reply-ok!
-                                    fuse
-                                    request
-                                    (domonad
-                                      state-m
-                                      [_ (write-attr-out 0 0)
-                                       _ (write-fuse-attr result)]
-                                      nil))
+      (map? result) (reply-ok!
+                      fuse
+                      request
+                      (domonad
+                        state-m
+                        [_ (write-attr-out 0 0)
+                         _ (write-fuse-attr result)]
+                        nil))
       (integer? result) (reply-error! fuse request result)
       true (reply-error! fuse request errno-nosys))))
-
-(defrecord statfs-out
-  [^BigInteger blocks
-   ^BigInteger bfree
-   ^BigInteger bavail
-   ^BigInteger files
-   ^BigInteger ffree
-   ^long bsize
-   ^long namelen
-   ^long frsize])
 
 (defn write-statfs-out
   [statfs-out]
@@ -194,26 +166,21 @@
   [fuse request arg]
   (let [result (.statfs (:filesystem fuse) request)]
     (cond 
-      (instance? statfs-out result) (reply-ok!
-                                      fuse
-                                      request
-                                      (write-statfs-out result))
+      (map? result) (reply-ok! fuse request (write-statfs-out result))
       (integer? result) (reply-error! fuse request result)
       true (reply-error! fuse request errno-nosys))))
 
-(defrecord init-in
-  [^long major
-   ^long minor
-   ^long max-readahead
-   ^int flags])
-
 (def parse-init-in
-  (domonad parser-m
+  (domonad
+    parser-m
     [major parse-uint32
      minor parse-uint32
      max-readahead parse-uint32
      flags parse-opaque32]
-    (init-in. major minor max-readahead flags)))
+    {:major major
+     :minor minor
+     :max-readahead max-readahead
+     :flags flags}))
 
 (defn write-init-out
   [init-out]
@@ -274,10 +241,6 @@
      _ skip-32]
     flags))
 
-(defrecord open-out
-  [^long handle
-   ^int flags])
-
 (defn write-open-out
   [open-out]
   (domonad
@@ -294,10 +257,7 @@
       (reply-error! fuse request errno-inval)
       (let [result (.opendir (:filesystem fuse) request flags)]
         (cond 
-          (instance? open-out result) (reply-ok!
-                                        fuse
-                                        request
-                                        (write-open-out result))
+          (map? result) (reply-ok! fuse request (write-open-out result))
           (integer? result) (reply-error! fuse request result)
           true (reply-error! fuse request errno-nosys))))))
 

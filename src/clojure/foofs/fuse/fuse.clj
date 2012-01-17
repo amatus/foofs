@@ -27,13 +27,34 @@
 (def test-fs
   (reify Filesystem
     (getattr [this request]
-      (foofs.fuse.protocol.fuse-attr. 0 0 0 0 0 0 0 0 0 040000 1 0 0 0))
+      {:inode 0
+       :size 0
+       :blocks 0
+       :atime 0
+       :mtime 0
+       :ctime 0
+       :atimensec 0
+       :mtimensec 0
+       :ctimensec 0
+       :mode 040000
+       :nlink 1
+       :uid 0
+       :gid 0
+       :rdev 0})
     (statfs [this request]
-      (foofs.fuse.protocol.statfs-out. 0 0 0 0 0 512 255 0))
+      {:blocks 0
+       :bfree 0
+       :bavail 0
+       :files 0
+       :ffree 0
+       :bsize 512
+       :namelen 255
+       :frsize 0})
     (init [this request]
       (.write *out* "init called.\n"))
     (opendir [this request flags]
-      (foofs.fuse.protocol.open-out. 1 0))))
+      {:handle 1
+       :flags 0})))
 
 (defn freebsd-mount
   [filesystem mountpoint]
