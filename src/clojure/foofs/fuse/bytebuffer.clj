@@ -1,5 +1,6 @@
 (ns foofs.fuse.bytebuffer
-  (:use foofs.fuse.parser))
+  (:use foofs.fuse.parser)
+  (:import java.nio.ByteBuffer))
 
 (defn parse-int32
   [buffer]
@@ -66,6 +67,21 @@
   (fn write-int64!
     [buffer]
     [nil (.putLong buffer x)]))
+
+(def bytes-class (class (byte-array 0)))
+(defn write-bytes
+  [x]
+  (cond
+    (instance? bytes-class x) (fn write-byte-array!
+                                [buffer]
+                                [nil (.put buffer x)])
+    (instance? ByteBuffer x) (fn write-byte-buffer!
+                               [buffer]
+                               [nil (.put buffer (.array x))])
+    (every? (partial instance? Byte) x)
+    (fn write-byte-seq!
+      [buffer]
+      [nil (.put buffer (into-array x))])))
 
 (defn pad
   [x]

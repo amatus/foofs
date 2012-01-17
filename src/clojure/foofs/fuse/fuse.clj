@@ -21,6 +21,7 @@
   (statfs [this request] "Get file system statistics.")
   (init [this request] "Initialize filesystem.")
   (opendir [this request flags] "Open directory.")
+  (readdir [this request read-in] "Read directory.")
   ;; and so on
   )
 
@@ -54,7 +55,9 @@
       (.write *out* "init called.\n"))
     (opendir [this request flags]
       {:handle 1
-       :flags 0})))
+       :flags 0})
+    (readdir [this request read-in]
+      [])))
 
 (defn freebsd-mount
   [filesystem mountpoint]

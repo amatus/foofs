@@ -261,11 +261,39 @@
           (integer? result) (reply-error! fuse request result)
           true (reply-error! fuse request errno-nosys))))))
 
+(def parse-read-in
+  (domonad
+    parser-m
+    [handle parse-opaque64
+     offset parse-uint64
+     size parse-uint32
+     read-flags parse-opaque32
+     lock-owner parse-opaque64
+     flags parse-opaque32
+     _ skip-32]
+    {:handle handle
+     :offset offset
+     :size size
+     :read-flags read-flags
+     :lock-owner lock-owner
+     :flags flags}))
+
+(defn process-readdir!
+  [fuse request arg]
+  (let [read-in (first (parse-read-in arg))]
+    (if (nil? read-in)
+      (reply-error! fuse request errno-inval)
+      (let [result (.readdir (:filesystem fuse) request read-in)]
+        (cond
+          (integer? result) (reply-error! fuse request result)
+          true (reply-ok! fuse request (write-bytes result)))))))
+
 (def ops
   {op-getattr process-getattr!
    op-statfs process-statfs!
    op-init process-init!
-   op-opendir process-opendir!})
+   op-opendir process-opendir!
+   op-readdir process-readdir!})
 
 (defn process-buf!
   [fuse buf]
