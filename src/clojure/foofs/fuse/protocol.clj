@@ -78,7 +78,7 @@
 
 (defn reply-error!
   [fuse request error]
-  (send-reply! fuse request error (with-monad state-m m-zero)))
+  (send-reply! fuse request error write-nothing))
 
 (defn reply-ok!
   [fuse request reply]
@@ -284,16 +284,39 @@
     (if (nil? read-in)
       (reply-error! fuse request errno-inval)
       (let [result (.readdir (:filesystem fuse) request read-in)]
-        (cond
-          (integer? result) (reply-error! fuse request result)
-          true (reply-ok! fuse request (write-bytes result)))))))
+        (if (integer? result)
+          (reply-error! fuse request result)
+          (reply-ok! fuse request (write-bytes result)))))))
+
+(def parse-release-in
+  (domonad
+    parser-m
+    [handle parse-opaque64
+     flags parse-opaque32
+     release-flags parse-opaque32
+     lock-owner parse-opaque64]
+    {:handle handle
+     :flags flags
+     :release-flags release-flags
+     :lock-owner lock-owner}))
+
+(defn process-releasedir!
+  [fuse request arg]
+  (let [release-in (first (parse-release-in arg))]
+    (if (nil? release-in)
+      (reply-error! fuse request errno-inval)
+      (let [result (.releasedir (:filesystem fuse) request release-in)]
+        (if (integer? result)
+          (reply-error! fuse request result)
+          (reply-error! fuse request 0))))))
 
 (def ops
   {op-getattr process-getattr!
    op-statfs process-statfs!
    op-init process-init!
    op-opendir process-opendir!
-   op-readdir process-readdir!})
+   op-readdir process-readdir!
+   op-releasedir process-releasedir!})
 
 (defn process-buf!
   [fuse buf]

@@ -1,5 +1,6 @@
 (ns foofs.fuse.bytebuffer
-  (:use foofs.fuse.parser)
+  (:use clojure.contrib.monads
+        foofs.fuse.parser)
   (:import java.nio.ByteBuffer))
 
 (defn parse-int32
@@ -89,3 +90,5 @@
     [buffer]
     (let [position (.position buffer)]
       [nil (.position buffer (+ x position))])))
+
+(def write-nothing (with-monad state-m (m-result nil)))

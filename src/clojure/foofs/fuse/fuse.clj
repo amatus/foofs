@@ -22,6 +22,7 @@
   (init [this request] "Initialize filesystem.")
   (opendir [this request flags] "Open directory.")
   (readdir [this request read-in] "Read directory.")
+  (releasedir [this request release-in] "Release Directory.")
   ;; and so on
   )
 
@@ -57,7 +58,9 @@
       {:handle 1
        :flags 0})
     (readdir [this request read-in]
-      [])))
+      [])
+    (releasedir [this request release-in]
+      nil)))
 
 (defn freebsd-mount
   [filesystem mountpoint]
