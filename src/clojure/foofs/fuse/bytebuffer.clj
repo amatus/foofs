@@ -51,6 +51,8 @@
 (def skip-64
   (skip 8))
 
+(def parse-nothing (with-monad parser-m (m-result nil)))
+
 (defn write-int16
   [x]
   (fn write-int16!
@@ -79,10 +81,11 @@
     (instance? ByteBuffer x) (fn write-byte-buffer!
                                [buffer]
                                [nil (.put buffer (.array x))])
-    (every? (partial instance? Byte) x)
+    (every? number? x)
     (fn write-byte-seq!
       [buffer]
-      [nil (.put buffer (into-array x))])))
+      (let [bytes-array (into-array Byte/TYPE (map #(.byteValue %) x))]
+        [nil (.put buffer bytes-array)]))))
 
 (defn pad
   [x]
@@ -92,3 +95,21 @@
       [nil (.position buffer (+ x position))])))
 
 (def write-nothing (with-monad state-m (m-result nil)))
+
+(defn buffer-seq!
+  "Returns a lazy seq that consumes a subclass of java.nio.Buffer."
+  [buffer]
+  (lazy-seq (when (.hasRemaining buffer)
+              (cons (.get buffer) (buffer-seq! buffer)))))
+
+(defn hexdigit
+  [x]
+  (.charAt "0123456789ABCDEF" x))
+
+(defn hexdump
+  [buffer]
+  (apply str
+         (interpose
+           " "
+           (map #(str (hexdigit (quot % 256)) (hexdigit (quot % 256)))
+                (buffer-seq! (.duplicate buffer))))))

@@ -133,19 +133,22 @@
     nil))
 
 (defn process-getattr!
-  [fuse request arg]
-  (let [result (.getattr (:filesystem fuse) request)]
-    (cond 
-      (map? result) (reply-ok!
-                      fuse
-                      request
-                      (domonad
-                        state-m
-                        [_ (write-attr-out 0 0)
-                         _ (write-fuse-attr result)]
-                        nil))
-      (integer? result) (reply-error! fuse request result)
-      true (reply-error! fuse request errno-nosys))))
+  [fuse request]
+  (.getattr
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (cond 
+        (map? result) (reply-ok!
+                        fuse
+                        request
+                        (domonad
+                         state-m
+                          [_ (write-attr-out 0 0)
+                           _ (write-fuse-attr result)]
+                          nil))
+        (integer? result) (reply-error! fuse request result)
+        true (reply-error! fuse request errno-nosys)))))
 
 (defn write-statfs-out
   [statfs-out]
@@ -163,12 +166,15 @@
     nil))
  
 (defn process-statfs!
-  [fuse request arg]
-  (let [result (.statfs (:filesystem fuse) request)]
-    (cond 
-      (map? result) (reply-ok! fuse request (write-statfs-out result))
-      (integer? result) (reply-error! fuse request result)
-      true (reply-error! fuse request errno-nosys))))
+  [fuse request]
+  (.statfs
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (cond 
+        (map? result) (reply-ok! fuse request (write-statfs-out result))
+        (integer? result) (reply-error! fuse request result)
+        true (reply-error! fuse request errno-nosys)))))
 
 (def parse-init-in
   (domonad
@@ -195,14 +201,11 @@
     nil))
 
 (defn process-init!
-  [fuse request arg]
+  [fuse request]
   (domonad
     maybe-m
-    [:let [init (first (parse-init-in arg))]
-     _ (if (nil? init)
-         (reply-error! fuse request errno-inval)
-         :nop)
-     :let [connection (:connection fuse)]
+    [:let [init (:arg request)
+           connection (:connection fuse)]
      _ (do
          (reset! (:proto-major connection) (:major init))
          (reset! (:proto-minor connection) (:minor init))
@@ -251,15 +254,15 @@
     nil))
 
 (defn process-opendir!
-  [fuse request arg]
-  (let [flags (first (parse-open-in arg))]
-    (if (nil? flags)
-      (reply-error! fuse request errno-inval)
-      (let [result (.opendir (:filesystem fuse) request flags)]
-        (cond 
-          (map? result) (reply-ok! fuse request (write-open-out result))
-          (integer? result) (reply-error! fuse request result)
-          true (reply-error! fuse request errno-nosys))))))
+  [fuse request]
+  (.opendir
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (cond 
+        (map? result) (reply-ok! fuse request (write-open-out result))
+        (integer? result) (reply-error! fuse request result)
+        true (reply-error! fuse request errno-nosys)))))
 
 (def parse-read-in
   (domonad
@@ -267,69 +270,75 @@
     [handle parse-opaque64
      offset parse-uint64
      size parse-uint32
-     read-flags parse-opaque32
-     lock-owner parse-opaque64
-     flags parse-opaque32
-     _ skip-32]
+     read-flags parse-opaque32]
     {:handle handle
      :offset offset
      :size size
-     :read-flags read-flags
-     :lock-owner lock-owner
-     :flags flags}))
+     :read-flags read-flags}))
 
 (defn process-readdir!
-  [fuse request arg]
-  (let [read-in (first (parse-read-in arg))]
-    (if (nil? read-in)
-      (reply-error! fuse request errno-inval)
-      (let [result (.readdir (:filesystem fuse) request read-in)]
-        (if (integer? result)
-          (reply-error! fuse request result)
-          (reply-ok! fuse request (write-bytes result)))))))
+  [fuse request]
+  (.readdir
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-bytes result))))))
 
 (def parse-release-in
   (domonad
     parser-m
     [handle parse-opaque64
      flags parse-opaque32
-     release-flags parse-opaque32
-     lock-owner parse-opaque64]
+     release-flags parse-opaque32]
     {:handle handle
      :flags flags
-     :release-flags release-flags
-     :lock-owner lock-owner}))
+     :release-flags release-flags}))
 
 (defn process-releasedir!
-  [fuse request arg]
-  (let [release-in (first (parse-release-in arg))]
-    (if (nil? release-in)
-      (reply-error! fuse request errno-inval)
-      (let [result (.releasedir (:filesystem fuse) request release-in)]
-        (if (integer? result)
-          (reply-error! fuse request result)
-          (reply-error! fuse request 0))))))
+  [fuse request]
+  (.releasedir
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-error! fuse request 0)))))
 
 (def ops
-  {op-getattr process-getattr!
-   op-statfs process-statfs!
-   op-init process-init!
-   op-opendir process-opendir!
-   op-readdir process-readdir!
-   op-releasedir process-releasedir!})
+  {op-getattr {:arg-parser parse-nothing
+               :processor! process-getattr!}
+   op-statfs {:arg-parser parse-nothing
+              :processor! process-statfs!}
+   op-init {:arg-parser parse-init-in
+            :processor! process-init!}
+   op-opendir {:arg-parser parse-open-in
+               :processor! process-opendir!}
+   op-readdir {:arg-parser parse-read-in
+               :processor! process-readdir!}
+   op-releasedir {:arg-parser parse-release-in
+                  :processor! process-releasedir!}})
 
 (defn process-buf!
   [fuse buf]
   (domonad maybe-m
-    [[request arg] (parse-in-header buf)
+    [[request arg-buf] (parse-in-header buf)
      ;; TODO: do something with in-header.len?
      :let [opcode (:opcode request)
            op (ops opcode)]
      _ (if (nil? op)
          (do
-           (.write *out* (str "No op for " opcode "\n"))
+           (.println *err* (str "No op for " opcode))
            (reply-error! fuse request errno-nosys)
            nil)
          :nop)
-     _ (op fuse request arg)] nil))
+     :let [argx ((:arg-parser op) arg-buf)]
+     _ (if (nil? argx)
+         (do
+           (.println *err* (str "Invalid arg " (hexdump arg-buf)
+                                " for " opcode))
+           (reply-error! fuse request errno-inval))
+         :nop)
+     _ ((:processor! op) fuse (assoc request :arg (first argx)))] nil))
 

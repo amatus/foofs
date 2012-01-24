@@ -17,50 +17,54 @@
 
 (defprotocol Filesystem
   "A FUSE filesystem."
-  (getattr [this request] "Get file attributes.")
-  (statfs [this request] "Get file system statistics.")
+  (getattr [this request continuation!] "Get file attributes.")
+  (statfs [this request continuation!] "Get file system statistics.")
   (init [this request] "Initialize filesystem.")
-  (opendir [this request flags] "Open directory.")
-  (readdir [this request read-in] "Read directory.")
-  (releasedir [this request release-in] "Release Directory.")
+  (opendir [this request continuation!] "Open directory.")
+  (readdir [this request continuation!] "Read directory.")
+  (releasedir [this request continuation!] "Release Directory.")
   ;; and so on
   )
 
 (def test-fs
   (reify Filesystem
-    (getattr [this request]
-      {:inode 0
-       :size 0
-       :blocks 0
-       :atime 0
-       :mtime 0
-       :ctime 0
-       :atimensec 0
-       :mtimensec 0
-       :ctimensec 0
-       :mode 040000
-       :nlink 1
-       :uid 0
-       :gid 0
-       :rdev 0})
-    (statfs [this request]
-      {:blocks 0
-       :bfree 0
-       :bavail 0
-       :files 0
-       :ffree 0
-       :bsize 512
-       :namelen 255
-       :frsize 0})
+    (getattr [this request continuation!]
+      (continuation!
+        {:inode 0
+         :size 0
+         :blocks 0
+         :atime 0
+         :mtime 0
+         :ctime 0
+         :atimensec 0
+         :mtimensec 0
+         :ctimensec 0
+         :mode 040000
+         :nlink 1
+         :uid 0
+         :gid 0
+         :rdev 0}))
+    (statfs [this request continuation!]
+      (continuation!
+       {:blocks 0
+        :bfree 0
+        :bavail 0
+        :files 0
+        :ffree 0
+        :bsize 512
+        :namelen 255
+        :frsize 0}))
     (init [this request]
-      (.write *out* "init called.\n"))
-    (opendir [this request flags]
-      {:handle 1
-       :flags 0})
-    (readdir [this request read-in]
-      [])
-    (releasedir [this request release-in]
-      nil)))
+      (.println *err* "init called."))
+    (opendir [this request continuation!]
+      (continuation!
+        {:handle 1
+         :flags 0}))
+    (readdir [this request continuation!]
+      (continuation!
+        []))
+    (releasedir [this request continuation!]
+      (continuation! nil))))
 
 (defn freebsd-mount
   [filesystem mountpoint]
