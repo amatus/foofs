@@ -76,8 +76,14 @@
         {:handle 1
          :flags 0}))
     (readdir [this request continuation!]
-      (continuation!
-        []))
+      (let [dirent (encode-dirent
+                     {:nodeid 1
+                      :type stat-type-directory
+                      :name "test"})
+            result (take (:size (:arg request))
+                         (drop (:offset (:arg request))
+                               dirent))]
+        (continuation! result)))
     (releasedir [this request continuation!]
       (continuation! nil))))
 

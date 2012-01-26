@@ -291,6 +291,27 @@
      :size size
      :read-flags read-flags}))
 
+(def name-offset 24)
+(defn dirent-align
+  [x]
+  (* 8 (quot (+ x 7) 8)))
+
+(defn encode-dirent
+  [dirent]
+  (let [namebytes (.getBytes (:name dirent) "UTF-8")
+        namelen (count namebytes)
+        entsize (dirent-align (+ name-offset namelen))]
+    (take
+      entsize
+      (concat
+        (encode-int64 (:nodeid dirent))
+        (encode-int64 entsize)
+        (encode-int32 namelen)
+        (encode-int32 (bit-shift-right (bit-and stat-type-mask (:type dirent))
+                                       12))
+        namebytes
+        (repeat 0)))))
+
 (defn process-readdir!
   [fuse request]
   (.readdir

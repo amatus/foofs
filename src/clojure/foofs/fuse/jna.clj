@@ -15,7 +15,8 @@
 
 (ns foofs.fuse.jna
   (:import (com.sun.jna Function Memory NativeLong Platform Pointer StringArray)
-           com.sun.jna.ptr.IntByReference))
+           com.sun.jna.ptr.IntByReference
+           java.nio.ByteOrder))
 
 (defmacro assert-args [fnname & pairs]
   `(do (when-not ~(first pairs)
@@ -127,3 +128,41 @@
     (def errno-inval 22)
     (def errno-nosys 78)
     (def errno-proto 92)))
+
+(def byte-order (.order (.getByteBuffer (Memory. 1) 0 1)))
+
+(if (= ByteOrder/BIG_ENDIAN byte-order)
+  (do
+    (defn encode-int16
+      [x]
+      (list (.byteValue (bit-shift-right x 8)) (.byteValue (bit-and x 0xFF))))
+    (defn encode-int32
+      [x]
+      (concat (encode-int16 (bit-shift-right x 16))
+              (encode-int16 (bit-and x 0xFFFF))))
+    (defn encode-int64
+      [x]
+      (concat (encode-int32 (bit-and (bit-shift-right x 32) 0xFFFFFFFF))
+              (encode-int32 (bit-and x 0xFFFFFFFF)))))
+  (do
+    (defn encode-int16
+      [x]
+      (list (.byteValue (bit-and x 0xFF)) (.byteValue (bit-shift-right x 8))))
+    (defn encode-int32
+      [x]
+      (concat (encode-int16 (bit-and x 0xFFFF))
+              (encode-int16 (bit-shift-right x 16))))
+    (defn encode-int64
+      [x]
+      (concat (encode-int32 (bit-and x 0xFFFFFFFF))
+              (encode-int32 (bit-and (bit-shift-right x 32) 0xFFFFFFFF))))))
+
+(def stat-type-fifo      0010000)
+(def stat-type-character 0020000)
+(def stat-type-directory 0040000)
+(def stat-type-block     0060000)
+(def stat-type-regular   0100000)
+(def stat-type-link      0120000)
+(def stat-type-socket    0140000)
+(def stat-type-whiteout  0160000)
+(def stat-type-mask      0170000)
