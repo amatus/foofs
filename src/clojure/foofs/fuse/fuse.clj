@@ -43,65 +43,6 @@
   ;; and so on
   )
 
-(def test-fs
-  (let [root-node-attr {:inode 1
-                        :size 0
-                        :blocks 0
-                        :atime 0
-                        :mtime 0
-                        :ctime 0
-                        :atimensec 0
-                        :mtimensec 0
-                        :ctimensec 0
-                        :mode 040000
-                        :nlink 1
-                        :uid 0
-                        :gid 0
-                        :rdev 0}]
-    (reify Filesystem
-      (lookup [this request continuation!]
-        (.println *err* (str "lookup: " request))
-        (continuation!
-          {:nodeid 1
-           :generation 0
-           :entry-valid 0
-           :attr-valid 0
-           :entry-valid-nsec 0
-           :attr-valid-nsec 0
-           :attr root-node-attr}))
-      (getattr [this request continuation!]
-        (.println *err* (str "getattr: " request))
-        (continuation! root-node-attr))
-      (statfs [this request continuation!]
-        (continuation!
-         {:blocks 0
-          :bfree 0
-          :bavail 0
-          :files 0
-          :ffree 0
-          :bsize 512
-          :namelen 255
-          :frsize 0}))
-      (init [this request]
-        (.println *err* "init called."))
-      (opendir [this request continuation!]
-        (continuation!
-          {:handle 1
-           :flags 0}))
-      (readdir [this request continuation!]
-        (let [dirent (encode-dirent
-                       {:nodeid 1
-                        :type stat-type-directory
-                        :name "test"})
-              result (take (:size (:arg request))
-                           (drop (:offset (:arg request))
-                                 dirent))]
-          (continuation! result)))
-      (releasedir [this request continuation!]
-        (continuation! nil))
-      (destroy [this request]
-        (.println *err* "destroy called.")))))
-
 (defn freebsd-mount
   [filesystem mountpoint]
   (try
