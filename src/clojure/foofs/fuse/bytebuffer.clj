@@ -55,10 +55,9 @@
   [x]
   (fn parse-skip
     [buffer]
-    (let [position (.position buffer)
-          buffer2 (.duplicate buffer)]
+    (let [buffer2 (.duplicate buffer)]
       (.order buffer2 (.order buffer))
-      [nil (.position buffer2 (+ x position))])))
+      [nil (.position buffer2 (+ x (.position buffer)))])))
 
 (def skip-32
   (skip 4))
@@ -67,6 +66,33 @@
   (skip 8))
 
 (def parse-nothing (with-monad parser-m (m-result nil)))
+
+(defn count-until
+  [pred coll]
+  (loop [pred pred
+         coll (seq coll)
+         count 0]
+    (cond
+      (empty? coll) count
+      (pred (first coll)) count
+      true (recur pred (rest coll) (+ 1 count)))))
+
+(defn buffer-seq!
+  "Returns a lazy seq that consumes a subclass of java.nio.Buffer."
+  [buffer]
+  (lazy-seq (when (.hasRemaining buffer)
+              (cons (.get buffer) (buffer-seq! buffer)))))
+
+(defn parse-utf8
+  [buffer]
+  (let [buffer2 (.duplicate buffer)
+        length (count-until (partial = 0) (buffer-seq! buffer2))
+        string-bytes (byte-array length)]
+    (.order buffer2 (.order buffer))
+    (.position buffer2 (.position buffer))
+    (.get buffer2 string-bytes)
+    (when (.hasRemaining buffer2) (.get buffer2))
+    [(String. string-bytes "UTF-8") buffer2]))
 
 (defn write-int16
   [x]
@@ -110,12 +136,6 @@
       [nil (.position buffer (+ x position))])))
 
 (def write-nothing (with-monad state-m (m-result nil)))
-
-(defn buffer-seq!
-  "Returns a lazy seq that consumes a subclass of java.nio.Buffer."
-  [buffer]
-  (lazy-seq (when (.hasRemaining buffer)
-              (cons (.get buffer) (buffer-seq! buffer)))))
 
 (defn hexdigit
   [x]

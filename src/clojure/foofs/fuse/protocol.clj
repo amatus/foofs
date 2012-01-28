@@ -118,6 +118,8 @@
      :gid gid
      :pid pid}))
 
+(def parse-lookup-in parse-utf8)
+
 (defn write-fuse-attr
   [attr]
   (domonad
@@ -147,9 +149,22 @@
      _ (write-int64 (:entry-valid entry-out))
      _ (write-int64 (:attr-valid entry-out))
      _ (write-int32 (:entry-valid-nsec entry-out))
-     _ (write-int32 (:attr-valid entry-out))
+     _ (write-int32 (:attr-valid-nsec entry-out))
      _ (write-fuse-attr (:attr entry-out))]
     nil))
+
+(defn process-lookup!
+  [fuse request]
+  (.lookup
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (cond
+        (map? result) (reply-ok!
+                        fuse
+                        request
+                        (write-entry-out result))
+        (integer? result) (reply-error! fuse request result)))))
 
 (defn write-attr-out
   [valid valid-nsec]
@@ -361,7 +376,9 @@
   (close (:fd fuse)))
 
 (def ops
-  {op-getattr {:arg-parser parse-nothing
+  {op-lookup {:arg-parser parse-lookup-in
+              :processor! process-lookup!}
+   op-getattr {:arg-parser parse-nothing
                :processor! process-getattr!}
    op-statfs {:arg-parser parse-nothing
               :processor! process-statfs!}
