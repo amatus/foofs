@@ -138,6 +138,19 @@
      _ (write-int32 (:rdev attr))]
     nil))
 
+(defn write-entry-out
+  [entry-out]
+  (domonad
+    state-m
+    [_ (write-int64 (:nodeid entry-out))
+     _ (write-int64 (:generation entry-out))
+     _ (write-int64 (:entry-valid entry-out))
+     _ (write-int64 (:attr-valid entry-out))
+     _ (write-int32 (:entry-valid-nsec entry-out))
+     _ (write-int32 (:attr-valid entry-out))
+     _ (write-fuse-attr (:attr entry-out))]
+    nil))
+
 (defn write-attr-out
   [valid valid-nsec]
   (domonad
@@ -365,7 +378,8 @@
            op (ops opcode)]
      _ (if (nil? op)
          (do
-           (.println *err* (str "No op for " opcode))
+           (.println *err* (str "No op for " request))
+           (.println *err* (hexdump arg-buf))
            (reply-error! fuse request errno-nosys)
            nil)
          :nop)
