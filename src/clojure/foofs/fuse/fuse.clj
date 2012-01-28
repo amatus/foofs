@@ -38,6 +38,7 @@
   (opendir [this request continuation!] "Open directory.")
   (readdir [this request continuation!] "Read directory.")
   (releasedir [this request continuation!] "Release Directory.")
+  (destroy [this request] "Clean up filesystem.")
   ;; and so on
   )
 
@@ -85,7 +86,9 @@
                                dirent))]
         (continuation! result)))
     (releasedir [this request continuation!]
-      (continuation! nil))))
+      (continuation! nil))
+    (destroy [this request]
+      (.println *err* "destroy called."))))
 
 (defn freebsd-mount
   [filesystem mountpoint]

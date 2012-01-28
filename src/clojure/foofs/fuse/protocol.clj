@@ -355,6 +355,11 @@
         (reply-error! fuse request result)
         (reply-error! fuse request 0)))))
 
+(defn process-destroy!
+  [fuse request]
+  (.destroy (:filesystem fuse) request)
+  (close (:fd fuse)))
+
 (def ops
   {op-getattr {:arg-parser parse-nothing
                :processor! process-getattr!}
@@ -367,7 +372,9 @@
    op-readdir {:arg-parser parse-read-in
                :processor! process-readdir!}
    op-releasedir {:arg-parser parse-release-in
-                  :processor! process-releasedir!}})
+                  :processor! process-releasedir!}
+   op-destroy {:arg-parser parse-nothing
+               :processor! process-destroy!}})
 
 (defn process-buf!
   [fuse buf]
