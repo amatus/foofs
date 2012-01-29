@@ -119,12 +119,14 @@
 
 (when (Platform/isLinux)
   (do
+    (def errno-noent 2)
     (def errno-inval 22)
     (def errno-nosys 38)
     (def errno-proto 71)))
 
 (when (Platform/isFreeBSD)
   (do
+    (def errno-noent 2)
     (def errno-inval 22)
     (def errno-nosys 78)
     (def errno-proto 92)))
