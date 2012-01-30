@@ -166,6 +166,17 @@
                         (write-entry-out result))
         (integer? result) (reply-error! fuse request result)))))
 
+(def parse-forget-in
+  (domonad
+    parser-m
+    [nlookup parse-uint64]
+    nlookup))
+
+(defn process-forget!
+  [fuse request]
+  (.forget (:filesystem fuse) request)
+  (reply-ok! fuse request write-nothing))
+
 (defn write-attr-out
   [valid valid-nsec]
   (domonad
@@ -378,6 +389,8 @@
 (def ops
   {op-lookup {:arg-parser parse-lookup-in
               :processor! process-lookup!}
+   op-forget {:arg-parser parse-forget-in
+              :processor! process-forget!}
    op-getattr {:arg-parser parse-nothing
                :processor! process-getattr!}
    op-statfs {:arg-parser parse-nothing

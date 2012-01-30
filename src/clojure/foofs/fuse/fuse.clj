@@ -33,6 +33,7 @@
 (defprotocol Filesystem
   "A FUSE filesystem."
   (lookup [this request continuation!] "Lookup inode.")
+  (forget [this request] "I forget.")
   (getattr [this request continuation!] "Get file attributes.")
   (statfs [this request continuation!] "Get file system statistics.")
   (init [this request] "Initialize filesystem.")

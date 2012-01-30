@@ -83,6 +83,8 @@
                   default-entry
                   {:nodeid nodeid
                    :attr (:attr inode)}))))))))
+  (forget [this request]
+    (.println *err* (str "forget: " request)))
   (getattr [this request continuation!]
     (.println *err* (str "getattr: " request))
     (if (not (contains? inodes (:nodeid request)))
