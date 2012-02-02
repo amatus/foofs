@@ -35,7 +35,10 @@
   (lookup [this request continuation!] "Lookup inode.")
   (forget [this request] "I forget.")
   (getattr [this request continuation!] "Get file attributes.")
+  (open [this request continuation!] "Open file.")
+  (read [this request continuation!] "Read file.")
   (statfs [this request continuation!] "Get file system statistics.")
+  (release [this request continuation!] "Release file.")
   (init [this request] "Initialize filesystem.")
   (opendir [this request continuation!] "Open directory.")
   (readdir [this request continuation!] "Read directory.")
@@ -47,7 +50,7 @@
 (defn freebsd-mount
   [filesystem mountpoint]
   (try
-    (let [fd (open "/dev/fuse" 0100002 0)
+    (let [fd (c-open "/dev/fuse" 0100002 0)
           pid (IntByReference.)
           ret (posix_spawn pid "/usr/sbin/mount_fusefs" nil nil
                            ["mount_fusefs" "-o" "default_permissions" (str fd)
@@ -67,8 +70,8 @@
               (reset! (:read-thread fuse) read-thread)
               (.start read-thread)
               fuse)
-            (close fd)))
-        (close fd)))
+            (c-close fd)))
+        (c-close fd)))
     (catch Exception e
       (.printStackTrace e)
       nil)))

@@ -204,6 +204,54 @@
         (integer? result) (reply-error! fuse request result)
         true (reply-error! fuse request errno-nosys)))))
 
+(def parse-open-in
+  (domonad parser-m
+    [flags parse-opaque32
+     _ skip-32]
+    flags))
+
+(defn write-open-out
+  [open-out]
+  (domonad
+    state-m
+    [_ (write-int64 (:handle open-out))
+     _ (write-int32 (:flags open-out))
+     _ (pad 4)]
+    nil))
+
+(defn process-open!
+  [fuse request]
+  (.open
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (cond 
+        (map? result) (reply-ok! fuse request (write-open-out result))
+        (integer? result) (reply-error! fuse request result)
+        true (reply-error! fuse request errno-nosys)))))
+
+(def parse-read-in
+  (domonad
+    parser-m
+    [handle parse-opaque64
+     offset parse-uint64
+     size parse-uint32
+     read-flags parse-opaque32]
+    {:handle handle
+     :offset offset
+     :size size
+     :read-flags read-flags}))
+
+(defn process-read!
+  [fuse request]
+  (.read
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-bytes result))))))
+
 (defn write-statfs-out
   [statfs-out]
   (domonad
@@ -229,6 +277,26 @@
         (map? result) (reply-ok! fuse request (write-statfs-out result))
         (integer? result) (reply-error! fuse request result)
         true (reply-error! fuse request errno-nosys)))))
+
+(def parse-release-in
+  (domonad
+    parser-m
+    [handle parse-opaque64
+     flags parse-opaque32
+     release-flags parse-opaque32]
+    {:handle handle
+     :flags flags
+     :release-flags release-flags}))
+
+(defn process-release!
+  [fuse request]
+  (.release
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-error! fuse request 0)))))
 
 (def parse-init-in
   (domonad
@@ -292,21 +360,6 @@
          :nop)
      ] nil))
 
-(def parse-open-in
-  (domonad parser-m
-    [flags parse-opaque32
-     _ skip-32]
-    flags))
-
-(defn write-open-out
-  [open-out]
-  (domonad
-    state-m
-    [_ (write-int64 (:handle open-out))
-     _ (write-int32 (:flags open-out))
-     _ (pad 4)]
-    nil))
-
 (defn process-opendir!
   [fuse request]
   (.opendir
@@ -317,18 +370,6 @@
         (map? result) (reply-ok! fuse request (write-open-out result))
         (integer? result) (reply-error! fuse request result)
         true (reply-error! fuse request errno-nosys)))))
-
-(def parse-read-in
-  (domonad
-    parser-m
-    [handle parse-opaque64
-     offset parse-uint64
-     size parse-uint32
-     read-flags parse-opaque32]
-    {:handle handle
-     :offset offset
-     :size size
-     :read-flags read-flags}))
 
 (def name-offset 24)
 (defn dirent-align
@@ -361,16 +402,6 @@
         (reply-error! fuse request result)
         (reply-ok! fuse request (write-bytes result))))))
 
-(def parse-release-in
-  (domonad
-    parser-m
-    [handle parse-opaque64
-     flags parse-opaque32
-     release-flags parse-opaque32]
-    {:handle handle
-     :flags flags
-     :release-flags release-flags}))
-
 (defn process-releasedir!
   [fuse request]
   (.releasedir
@@ -384,7 +415,7 @@
 (defn process-destroy!
   [fuse request]
   (.destroy (:filesystem fuse) request)
-  (close (:fd fuse)))
+  (c-close (:fd fuse)))
 
 (def ops
   {op-lookup {:arg-parser parse-lookup-in
@@ -393,8 +424,14 @@
               :processor! process-forget!}
    op-getattr {:arg-parser parse-nothing
                :processor! process-getattr!}
+   op-open {:arg-parser parse-open-in
+            :processor! process-open!}
+   op-read {:arg-parser parse-read-in
+            :processor! process-read!}
    op-statfs {:arg-parser parse-nothing
               :processor! process-statfs!}
+   op-release {:arg-parser parse-release-in
+               :processor! process-release!}
    op-init {:arg-parser parse-init-in
             :processor! process-init!}
    op-opendir {:arg-parser parse-open-in

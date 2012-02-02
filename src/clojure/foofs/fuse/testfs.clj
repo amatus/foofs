@@ -39,6 +39,8 @@
    :gid 0
    :rdev 0})
 
+(def hello-world-bytes (.getBytes "hello world!\n" "UTF-8"))
+
 (def inodes
   {1 {:attr (conj
               default-attr
@@ -51,11 +53,11 @@
    2 {:attr (conj
               default-attr
               {:inode 2
-               :size 1
+               :size (count hello-world-bytes)
                :blocks 1
                :mode stat-type-regular
                :nlink 1})
-      :dirents {}}
+      :content hello-world-bytes}
    }
   )
 
@@ -90,16 +92,50 @@
     (if (not (contains? inodes (:nodeid request)))
       (continuation! errno-noent)
       (continuation! (:attr (inodes (:nodeid request))))))
+  (open [this request continuation!]
+    (.println *err* (str "open: " request))
+    (if (not (contains? inodes (:nodeid request)))
+      (continuation! errno-noent)
+      (send (:state-agent this)
+            (fn [state]
+              (let [handle (:next-handle state)]
+                ;; do another send to make sure state is updated before
+                ;; continuation! is called
+                (send (:state-agent this)
+                      (fn [state]
+                        (continuation! {:handle handle :flags 0})
+                        state))
+                (conj state {:handles (assoc
+                                        (:handles state)
+                                        handle
+                                        (:content (inodes (:nodeid request))))
+                             :next-handle (inc handle)}))))))
+  (read [this request continuation!]
+    (.println *err* (str "read: " request))
+    (let [handles (:handles (deref (:state-agent this)))
+          arg (:arg request)
+          result (take (:size arg)
+                       (drop (:offset arg)
+                             (handles (:handle arg))))]
+      (continuation! result)))
   (statfs [this request continuation!]
     (continuation!
-     {:blocks 0
-      :bfree 0
-      :bavail 0
-      :files 0
-      :ffree 0
-      :bsize 512
-      :namelen 255
-      :frsize 0}))
+      {:blocks 0
+       :bfree 0
+       :bavail 0
+       :files 0
+       :ffree 0
+       :bsize 512
+       :namelen 255
+       :frsize 0}))
+  (release [this request continuation!]
+    (.println *err* (str "release: " request))
+    (continuation! nil)
+    (send (:state-agent this)
+          (fn [state]
+            (assoc state
+                   :handles (dissoc (:handles state)
+                                    (:handle (:arg request)))))))
   (init [this request]
     (.println *err* "init called.")
     (send (:state-agent this)
@@ -134,6 +170,7 @@
                              (handles (:handle arg))))]
       (continuation! result)))
   (releasedir [this request continuation!]
+    (.println *err* (str "releasedir: " request))
     (continuation! nil)
     (send (:state-agent this)
           (fn [state]

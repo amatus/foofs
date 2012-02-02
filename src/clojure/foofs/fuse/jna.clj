@@ -51,7 +51,7 @@
 ;; on all the machines I've checked pid_t is equivalent to int32_t
 (def pid_t int32_t)
 
-(def-jna open ["c" "open" Function/THROW_LAST_ERROR]
+(def-jna c-open ["c" "open" Function/THROW_LAST_ERROR]
   [path flags mode]
   (assert-args open
     (string? path) "path is a String"
@@ -59,7 +59,7 @@
     (integer? mode) "mode is an integer")
   [path (int32_t flags) (int32_t mode)])
 
-(def-jna close ["c" "close" Function/THROW_LAST_ERROR]
+(def-jna c-close ["c" "close" Function/THROW_LAST_ERROR]
   [fd]
   (assert-args close
     (integer? fd) "fd is an integer")
