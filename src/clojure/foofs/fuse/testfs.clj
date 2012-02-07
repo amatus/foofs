@@ -47,9 +47,18 @@
               {:inode 1
                :mode stat-type-directory
                :nlink 1})
-      :dirents {"test" {:name "test"
+      :dirents {"." {:name "."
+                     :nodeid 1
+                     :type stat-type-directory}
+                ".." {:name ".."
+                      :nodeid 1
+                      :type stat-type-directory}
+                "test" {:name "test"
                         :nodeid 2
-                        :type stat-type-regular}}}
+                        :type stat-type-regular}
+                "folder" {:name "folder"
+                          :nodeid 3
+                          :type stat-type-directory}}}
    2 {:attr (conj
               default-attr
               {:inode 2
@@ -58,6 +67,18 @@
                :mode stat-type-regular
                :nlink 1})
       :content hello-world-bytes}
+   3 {:attr (conj
+              default-attr
+              {:inode 3
+               :mode stat-type-directory
+               :nlink 1})
+      :dirents {"." {:name "."
+                     :nodeid 3
+                     :type stat-type-directory}
+                ".." {:name ".."
+                      :nodeid 1
+                      :type stat-type-directory}
+                     }}
    }
   )
 
@@ -147,8 +168,7 @@
       (continuation! errno-noent)
       (send (:state-agent this)
             (fn [state]
-              (let [dirents (mapcat
-                              encode-dirent
+              (let [dirents (encode-dirents
                               (vals (:dirents (inodes (:nodeid request)))))
                     handle (:next-handle state)]
                 ;; do another send to make sure state is updated before

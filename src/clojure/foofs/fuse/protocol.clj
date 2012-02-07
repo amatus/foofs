@@ -377,7 +377,7 @@
   (* 8 (quot (+ x 7) 8)))
 
 (defn encode-dirent
-  [dirent]
+  [dirent offset]
   (let [namebytes (.getBytes (:name dirent) "UTF-8")
         namelen (count namebytes)
         entsize (dirent-align (+ name-offset namelen))]
@@ -385,12 +385,23 @@
       entsize
       (concat
         (encode-int64 (:nodeid dirent))
-        (encode-int64 entsize)
+        (encode-int64 (+ offset entsize))
         (encode-int32 namelen)
         (encode-int32 (bit-shift-right (bit-and stat-type-mask (:type dirent))
                                        12))
         namebytes
         (repeat 0)))))
+
+(defn encode-dirents
+  [dirents]
+  (first (reduce (fn
+                   [state dirent]
+                   (let [[encoded-dirents offset] state
+                         encoded-dirent (encode-dirent dirent offset)]
+                     [(concat encoded-dirents encoded-dirent)
+                      (+ offset (count encoded-dirent))]))
+                 [[] 0]
+                 dirents)))
 
 (defn process-readdir!
   [fuse request]
