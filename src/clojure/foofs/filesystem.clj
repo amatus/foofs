@@ -13,7 +13,8 @@
 ; You should have received a copy of the GNU General Public License along
 ; with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-(ns foofs.filesystem)
+(ns foofs.filesystem
+  (:use foofs.util))
 
 ;; These are the operations that can be preformed on the filesystem "database".
 (defprotocol Filesystem
@@ -30,4 +31,58 @@
             "Return a lazy sequence of directory entries.")
   ;; and so on
   )
+
+(defn link-modifier!
+  [state-agent f inode continuation! state]
+  (let [attr-table (:attr-table state)
+        attr (get attr-table inode)]
+    (if (nil? attr)
+      (do
+        (continuation!)
+        state)
+      (do
+        (send state-agent
+              (fn [state]
+                (continuation!)
+                state))
+        (assoc-deep state (f (:link attr)) :attr-table inode :link)))))
+
+(defrecord FooFilesystem
+  [^clojure.lang.Agent state-agent]
+  Filesystem
+  (lookup [this inode child continuation!]
+    (let [state (deref state-agent)
+          lookup-table (:lookup-table state)
+          children (get lookup-table inode)
+          child (if (= "" child)
+                  inode
+                  (get children child))
+          attr-table (:attr-table state)
+          attr (get attr-table child)]
+      (if (nil? attr)
+        (continuation! nil)
+        (continuation! (assoc attr :inode child)))))
+  (getattr [this inode continuation!]
+    (let [attr-table (:attr-table (deref state-agent))
+          attr (get attr-table inode)]
+      (continuation! attr)))
+  (reference [this inode continuation!]
+    (send state-agent
+          (partial link-modifier! state-agent inc inode continuation!)))
+  (dereference [this inode continuation!]
+    (send state-agent
+          (partial link-modifier! state-agent dec inode continuation!)))
+  (clonedir [this inode continuation!]
+    (let [state (deref state-agent)
+          lookup-table (:lookup-table state)
+          children (get lookup-table inode)
+          attr-table (:attr-table state)]
+      (continuation!
+        (map
+          (fn [kv]
+            (let [[name inode] kv]
+              (conj {:name name
+                     :inode inode}
+                    (get attr-table inode))))
+          children)))))
 
