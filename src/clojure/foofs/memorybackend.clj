@@ -22,14 +22,14 @@
         attr (get attr-table inode)]
     (if (nil? attr)
       (do
-        (continuation!)
+        (continuation! nil)
         state)
-      (do
+      (let [link (f (:link attr))]
         (send state-agent
               (fn [state]
-                (continuation!)
+                (continuation! link)
                 state))
-        (assoc-deep state (f (:link attr)) :attr-table inode :link)))))
+        (assoc-deep state link :attr-table inode :link)))))
 
 (defrecord MemoryBackend
   [^clojure.lang.Agent state-agent]
