@@ -25,12 +25,12 @@
       (do
         (continuation! nil)
         state)
-      (let [link (f (:link attr))]
+      (let [link (f (:nlink attr))]
         (send state-agent
               (fn [state]
                 (continuation! link)
                 state))
-        (assoc-deep state link :attr-table inode :link)))))
+        (assoc-deep state link :attr-table inode :nlink)))))
 
 (defrecord MemoryBackend
   [^clojure.lang.Agent state-agent]
@@ -65,9 +65,10 @@
       (continuation!
         (map
           (fn [kv]
-            (let [[name inode] kv]
-              (conj {:name name
-                     :inode inode}
-                    (get attr-table inode))))
+            (let [[name inode] kv
+                  attr (get attr-table inode)]
+              {:name name
+               :nodeid inode
+               :type (:mode attr)}))
           children)))))
 
