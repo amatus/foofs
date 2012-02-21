@@ -14,7 +14,8 @@
 ; with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns foofs.memorybackend
-  (:use (foofs filesystem util)))
+  (:use [foofs.filesystembackend :only [FilesystemBackend]]
+        foofs.util))
 
 (defn link-modifier!
   [state-agent f inode continuation! state]

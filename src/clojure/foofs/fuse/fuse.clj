@@ -30,23 +30,6 @@
       (catch Exception e
         (.printStackTrace e)))))
 
-(defprotocol Filesystem
-  "A FUSE filesystem."
-  (lookup [this request continuation!] "Lookup inode.")
-  (forget [this request] "I forget.")
-  (getattr [this request continuation!] "Get file attributes.")
-  (open [this request continuation!] "Open file.")
-  (readfile [this request continuation!] "Read file.")
-  (statfs [this request continuation!] "Get file system statistics.")
-  (release [this request continuation!] "Release file.")
-  (init [this request] "Initialize filesystem.")
-  (opendir [this request continuation!] "Open directory.")
-  (readdir [this request continuation!] "Read directory.")
-  (releasedir [this request continuation!] "Release Directory.")
-  (destroy [this request] "Clean up filesystem.")
-  ;; and so on
-  )
-
 (defn freebsd-mount
   [filesystem mountpoint]
   (try

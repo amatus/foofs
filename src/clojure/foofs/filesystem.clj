@@ -14,25 +14,12 @@
 ; with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns foofs.filesystem
-  (:use foofs.fuse.fuse))
-
-(defprotocol FilesystemBackend
-  "The interface provided by a Foofs backend."
-  (lookup [this inode child continuation!]
-          "Lookup the inode of a directory entry.")
-  (getattr [this inode continuation!]
-           "Get the attributes of an inode.")
-  (reference [this inode continuation!]
-             "Increment link count of an inode.")
-  (dereference [this inode continuation!]
-               "Decrement link count of an inode.")
-  (clonedir [this inode continuation!]
-            "Return a lazy sequence of directory entries.")
-  ;; and so on
-  )
+  (:use [foofs.filesystembackend :only [FilesystemBackend]]
+        [foofs.fuse.filesystem :only [Filesystem]]
+        foofs.fuse.jna))
 
 (defrecord FooFilesystem
-  [^FilesystemBackend backend
+  [^foofs.filesystembackend.FilesystemBackend backend
    ^clojure.lang.Agent readdir-agent]
   Filesystem
   (lookup [this request continuation!]

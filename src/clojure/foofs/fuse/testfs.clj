@@ -14,7 +14,8 @@
 ; with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns foofs.fuse.testfs
-  (:use (foofs.fuse fuse jna protocol)))
+  (:use (foofs.fuse fuse jna protocol)
+        [foofs.fuse.filesystem :only [Filesystem]]))
 
 (def default-entry
   {:generation 0
