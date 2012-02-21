@@ -71,7 +71,7 @@
           (continuation! errno-noent)
           (continuation! {:handle 0
                           :flags 0})))))
-  (read [this request continuation!]
+  (readfile [this request continuation!]
     (continuation! []))
   (statfs [this request continuation!]
     (continuation!

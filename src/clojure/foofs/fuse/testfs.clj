@@ -131,7 +131,7 @@
                                         handle
                                         (:content (inodes (:nodeid request))))
                              :next-handle (inc handle)}))))))
-  (read [this request continuation!]
+  (readfile [this request continuation!]
     (.println *err* (str "read: " request))
     (let [handles (:handles (deref (:state-agent this)))
           arg (:arg request)

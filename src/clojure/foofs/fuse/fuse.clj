@@ -36,7 +36,7 @@
   (forget [this request] "I forget.")
   (getattr [this request continuation!] "Get file attributes.")
   (open [this request continuation!] "Open file.")
-  (read [this request continuation!] "Read file.")
+  (readfile [this request continuation!] "Read file.")
   (statfs [this request continuation!] "Get file system statistics.")
   (release [this request continuation!] "Release file.")
   (init [this request] "Initialize filesystem.")
