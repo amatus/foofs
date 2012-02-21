@@ -16,7 +16,7 @@
 (ns foofs.filesystem
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
         [foofs.fuse.filesystem :only [Filesystem]]
-        foofs.fuse.jna))
+        (foofs.fuse jna protocol)))
 
 (defrecord FooFilesystem
   [^foofs.filesystembackend.FilesystemBackend backend
@@ -103,7 +103,8 @@
                   readdir-agent
                   (fn [state]
                     (continuation! {:handle handle
-                                    :flags 0})))
+                                    :flags 0})
+                    state))
                 {:opendirs (assoc opendirs handle [])
                  :next-handle (inc handle)})))))))
   (readdir [this request continuation!]
@@ -115,16 +116,17 @@
         (.clonedir
           backend (:nodeid request)
           (fn [dirents]
-            (send
-              readdir-agent
-              (fn [state]
-                (send
-                  readdir-agent
-                  (fn [state]
-                    (continuation! (take size dirents))
-                    state))
-                {:opendirs (assoc (:opendirs state) handle dirents)
-                 :next-handle (:next-handle state)}))))
+            (let [encoded-dirents (encode-dirents dirents)]
+              (send
+                readdir-agent
+                (fn [state]
+                  (send
+                    readdir-agent
+                    (fn [state]
+                      (continuation! (take size encoded-dirents))
+                      state))
+                  {:opendirs (assoc (:opendirs state) handle encoded-dirents)
+                   :next-handle (:next-handle state)})))))
         (let [dirents ((:opendirs (deref readdir-agent)) handle)]
           (continuation! (take size (drop offset dirents)))))))
   (releasedir [this request continuation!]
