@@ -87,16 +87,22 @@
 (def-jna getgid ["c" "getgid"]
   [])
 
-;; This is the type signature for Linux, BSD is different.
-(def-jna mount ["c" "mount" Function/THROW_LAST_ERROR]
-  [source target filesystemtype mountflags data]
-  (assert-args mount
-    (string? source) "source is a String"
-    (string? target) "target is a String"
-    (string? filesystemtype) "filesystemtype is a String"
-    (integer? mountflags) "mountflags is an integer"
-    (string? data) "data is a String")
-  [source target filesystemtype (int32_t mountflags) data])
+(def-jna socketpair ["c" "socketpair" Function/THROW_LAST_ERROR]
+  [domain type protocol sv]
+  (assert-args socketpair
+    (integer? domain) "domain is an integer"
+    (integer? type) "type is an integer"
+    (integer? protocol) "protocol is an integer"
+    (pointer? sv) "sv is a pointer")
+  [(int32_t domain) (int32_t type) (int32_t protocol) sv])
+
+(def-jna recvmsg ["c" "recvmsg" Function/THROW_LAST_ERROR]
+  [sockfd, msg, flags]
+  (assert-args recvmsg
+    (integer? sockfd) "sockfd is an integer"
+    (pointer? msg) "msg is a pointer"
+    (integer? flags) "flags is an integer")
+  [(int32_t sockfd) msg (int32_t flags)])
 
 (def-jna posix_spawn ["c" "posix_spawn"]
   [pid path file_actions attrp argv envp]
