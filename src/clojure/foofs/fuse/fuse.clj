@@ -30,6 +30,18 @@
       (catch Exception e
         (.printStackTrace e)))))
 
+(defn start-filesystem
+  [filesystem fd]
+  (let [fuse {:filesystem filesystem
+              :fd fd
+              :read-thread (atom nil)
+              :connection {:proto-major (atom 0)
+                           :proto-minor (atom 0)}}
+        read-thread (Thread. (partial read-loop! fuse))]
+    (reset! (:read-thread fuse) read-thread)
+    (.start read-thread)
+    fuse))
+
 (defn freebsd-mount
   [filesystem mountpoint]
   (try
@@ -44,18 +56,30 @@
         (let [stat_loc (IntByReference.)]
           (waitpid (.getValue pid) stat_loc 0)
           (if (== 0 (.getValue stat_loc))
-            (let [fuse {:filesystem filesystem
-                        :fd fd
-                        :read-thread (atom nil)
-                        :connection {:proto-major (atom 0)
-                                     :proto-minor (atom 0)}}
-                  read-thread (Thread. (partial read-loop! fuse))]
-              (reset! (:read-thread fuse) read-thread)
-              (.start read-thread)
-              fuse)
+            (start-filesystem filesystem fd)
             (c-close fd)))
         (c-close fd)))
     (catch Exception e
       (.printStackTrace e)
       nil)))
 
+(defn linux-mount
+  [filesystem mountpoint]
+  (try
+    (let [sv (Memory. 8)]
+      (socketpair pf-unix sock-stream 0 sv)
+      (let [sock0 (.getInt sv 0)
+            sock1 (.getInt sv 4)
+            _ (.println *err* (str "socket pair " sock0 " " sock1))
+            pid (IntByReference.)
+            ret (posix_spawnp pid "fusermount" nil nil
+                             ["fusermount" "--" mountpoint]
+                             [(str "_FUSE_COMMFD=" sock0)])]
+        (.println *err* (str "spawn " ret))
+        (when (== 0 ret)
+          (let [rv (receive-fd sock1)]
+            (.println *err* (str "got fd " rv))
+            (start-filesystem filesystem rv)))))
+    (catch Exception e
+      (.printStackTrace e)
+      nil)))

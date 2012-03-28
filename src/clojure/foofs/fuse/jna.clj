@@ -97,7 +97,7 @@
   [(int32_t domain) (int32_t type) (int32_t protocol) sv])
 
 (def-jna recvmsg ["c" "recvmsg" Function/THROW_LAST_ERROR]
-  [sockfd, msg, flags]
+  [sockfd msg flags]
   (assert-args recvmsg
     (integer? sockfd) "sockfd is an integer"
     (pointer? msg) "msg is a pointer"
@@ -115,6 +115,17 @@
     (every? string? envp) "envp is a sequence of Strings")
   [pid path file_actions attrp (into-array argv) (into-array envp)])
 
+(def-jna posix_spawnp ["c" "posix_spawnp"]
+  [pid file file_actions attrp argv envp]
+  (assert-args posix_spawn
+    (instance? IntByReference pid) "pid is an IntByReference"
+    (string? file) "file is a string"
+    (pointer? file_actions) "file_actions is a Pointer"
+    (pointer? attrp) "attrp is a Pointer"
+    (every? string? argv) "argv is a sequence of Strings"
+    (every? string? envp) "envp is a sequence of Strings")
+  [pid file file_actions attrp (into-array argv) (into-array envp)])
+
 (def-jna waitpid ["c" "waitpid" Function/THROW_LAST_ERROR]
   [pid stat_loc options]
   (assert-args waitpid
@@ -128,7 +139,10 @@
     (def errno-noent 2)
     (def errno-inval 22)
     (def errno-nosys 38)
-    (def errno-proto 71)))
+    (def errno-proto 71)
+    (def pf-unix 1)
+    (def sock-stream 1)
+    (def scm-rights 1)))
 
 (when (Platform/isFreeBSD)
   (do
@@ -174,3 +188,23 @@
 (def stat-type-socket    0140000)
 (def stat-type-whiteout  0160000)
 (def stat-type-mask      0170000)
+
+(defn receive-fd
+  [sockfd]
+  (let [msg (Memory. 28)
+        iov (Memory. 8)
+        buf (Memory. 1)
+        ccmsg (Memory. 16)]
+    (.setPointer iov 0 buf)
+    (.setInt iov 4 1)
+    (.setPointer msg 8 iov)
+    (.setInt msg 12 (.size iov))
+    (.setPointer msg 16 ccmsg)
+    (.setInt msg 20 (.size ccmsg))
+    (try
+      (recvmsg sockfd msg 0)
+      (when (== scm-rights (.getInt ccmsg 8))
+        (.getInt ccmsg 12))
+      (catch Exception e
+        (.printStackTrace e)
+        nil))))
