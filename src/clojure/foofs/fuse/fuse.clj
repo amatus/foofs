@@ -70,15 +70,12 @@
       (socketpair pf-unix sock-stream 0 sv)
       (let [sock0 (.getInt sv 0)
             sock1 (.getInt sv 4)
-            _ (.println *err* (str "socket pair " sock0 " " sock1))
             pid (IntByReference.)
             ret (posix_spawnp pid "fusermount" nil nil
                              ["fusermount" "--" mountpoint]
                              [(str "_FUSE_COMMFD=" sock0)])]
-        (.println *err* (str "spawn " ret))
         (when (== 0 ret)
-          (let [rv (receive-fd sock1)]
-            (.println *err* (str "got fd " rv))
+          (when-let [rv (receive-fd sock1)]
             (start-filesystem filesystem rv)))))
     (catch Exception e
       (.printStackTrace e)

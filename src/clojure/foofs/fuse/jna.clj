@@ -96,7 +96,9 @@
     (pointer? sv) "sv is a pointer")
   [(int32_t domain) (int32_t type) (int32_t protocol) sv])
 
-(def-jna recvmsg ["c" "recvmsg" Function/THROW_LAST_ERROR]
+;; I thought this should THROW_LAST_ERROR but it keeps throwing EINVAL
+;; when it's actually working.
+(def-jna recvmsg ["c" "recvmsg"]
   [sockfd msg flags]
   (assert-args recvmsg
     (integer? sockfd) "sockfd is an integer"
@@ -142,6 +144,15 @@
     (def errno-proto 71)
     (def pf-unix 1)
     (def sock-stream 1)
+    ;; XXX these are all really bad
+    (def sizeof-msghdr 28)
+    (def offsetof-msg_iov 8)
+    (def offsetof-msg_iovlen 12)
+    (def offsetof-msg_control 16)
+    (def offsetof-msg_controllen 20)
+    (def sizeof-iovec 8)
+    (def offsetof-iov_base 0)
+    (def offsetof-iov_len 4)
     (def scm-rights 1)))
 
 (when (Platform/isFreeBSD)
@@ -189,22 +200,20 @@
 (def stat-type-whiteout  0160000)
 (def stat-type-mask      0170000)
 
+;; TODO: Figure out how to subclass com.sun.jna.Structure in Clojure or wimp
+;; out and write it in Java.
 (defn receive-fd
   [sockfd]
-  (let [msg (Memory. 28)
-        iov (Memory. 8)
+  (let [msg (Memory. sizeof-msghdr)
+        iov (Memory. sizeof-iovec)
         buf (Memory. 1)
         ccmsg (Memory. 16)]
-    (.setPointer iov 0 buf)
-    (.setInt iov 4 1)
-    (.setPointer msg 8 iov)
-    (.setInt msg 12 (.size iov))
-    (.setPointer msg 16 ccmsg)
-    (.setInt msg 20 (.size ccmsg))
-    (try
-      (recvmsg sockfd msg 0)
-      (when (== scm-rights (.getInt ccmsg 8))
-        (.getInt ccmsg 12))
-      (catch Exception e
-        (.printStackTrace e)
-        nil))))
+    (.setPointer iov offsetof-iov_base buf)
+    (.setInt iov offsetof-iov_len 1)
+    (.setPointer msg offsetof-msg_iov iov)
+    (.setInt msg offsetof-msg_iovlen (.size iov))
+    (.setPointer msg offsetof-msg_control ccmsg)
+    (.setInt msg offsetof-msg_controllen (.size ccmsg))
+    (let [rv (recvmsg sockfd msg 0)]
+      (when (and (< 0 rv) (== scm-rights (.getInt ccmsg 8)))
+        (.getInt ccmsg 12)))))
