@@ -105,14 +105,19 @@
                                  (range next-handle Long/MAX_VALUE)
                                  (range Long/MIN_VALUE next-handle))))]
                 (.println *err* (str "got handle " handle))
-                (send
-                  readdir-agent
-                  (fn [state]
-                    (continuation! {:handle handle
-                                    :flags 0})
-                    state))
-                {:opendirs (assoc opendirs handle [])
-                 :next-handle (inc handle)})))))))
+                (if (nil? handle)
+                  (do
+                    (continuation! errno-nomem)
+                    state)
+                  (do
+                    (send
+                      readdir-agent
+                      (fn [state]
+                        (continuation! {:handle handle
+                                        :flags 0})
+                        state))
+                    {:opendirs (assoc opendirs handle [])
+                     :next-handle (inc handle)})))))))))
   (readdir [this request continuation!]
     (.println *err* (str "readdir " request))
     (let [arg (:arg request)
