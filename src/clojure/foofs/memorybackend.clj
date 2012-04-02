@@ -42,13 +42,9 @@
           children (get lookup-table inode)
           child (if (= "" child)
                   inode
-                  (get children child))
-          attr-table (:attr-table state)
-          attr (get attr-table child)]
-      (.println *err* (str "child " child " attr " attr))
-      (if (nil? attr)
-        (continuation! nil)
-        (continuation! (assoc attr :inode child)))))
+                  (get children child))]
+      (.println *err* (str "child " child))
+      (continuation! child)))
   (getattr [this inode continuation!]
     (.println *err* (str "getattr " inode))
     (let [attr-table (:attr-table (deref state-agent))
