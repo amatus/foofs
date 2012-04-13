@@ -146,5 +146,6 @@
   (apply str
          (interpose
            " "
-           (map #(str (hexdigit (quot % 256)) (hexdigit (quot % 256)))
+           (map #(str (hexdigit (bit-and 15 (bit-shift-right % 4)))
+                      (hexdigit (bit-and 15 %)))
                 (buffer-seq! (.duplicate buffer))))))
