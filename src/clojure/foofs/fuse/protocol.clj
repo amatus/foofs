@@ -86,9 +86,9 @@
                         :unique (:unique request)})
        buf)
     (try
-      (let [ret (c-write (:fd fuse) mem (.limit buf))]
-        )
-      (catch Exception e nil)))
+      (c-write (:fd fuse) mem (.limit buf))
+      (catch Exception e
+        (.printStackTrace e))))
   nil)
 
 (defn reply-error!
@@ -366,7 +366,7 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (.println *err* (str "opendir result" result))
+      (.println *err* (str "opendir result " result))
       (cond 
         (map? result) (reply-ok! fuse request (write-open-out result))
         (integer? result) (reply-error! fuse request result)
