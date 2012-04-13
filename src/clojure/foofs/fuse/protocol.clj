@@ -93,7 +93,7 @@
 
 (defn reply-error!
   [fuse request error]
-  (send-reply! fuse request error write-nothing))
+  (send-reply! fuse request (- error) write-nothing))
 
 (defn reply-ok!
   [fuse request reply]
