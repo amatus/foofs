@@ -244,7 +244,7 @@
 
 (defn process-read!
   [fuse request]
-  (.read
+  (.readfile
     (:filesystem fuse)
     request
     (fn [result]

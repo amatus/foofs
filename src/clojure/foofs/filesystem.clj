@@ -61,7 +61,15 @@
           (continuation! {:handle 0
                           :flags 0})))))
   (readfile [this request continuation!]
-    (continuation! []))
+    (let [arg (:arg request)
+          offset (:offset arg)
+          size (:size arg)]
+      (.readfile
+        backend (:nodeid request) offset size
+        (fn [buffer]
+          (if (nil? buffer)
+            (continuation! errno-noent)
+            (continuation! buffer))))))
   (statfs [this request continuation!]
     (continuation!
       {:blocks 0

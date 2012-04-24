@@ -27,5 +27,7 @@
                "Decrement link count of an inode.")
   (clonedir [this inode continuation!]
             "Return a lazy sequence of directory entries.")
+  (readfile [this inode offset size continuation!]
+            "Return a ByteBuffer or sequence of bytes.")
   ;; and so on
   )

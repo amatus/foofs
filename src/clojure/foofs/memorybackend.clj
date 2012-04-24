@@ -73,5 +73,10 @@
               {:name name
                :nodeid inode
                :type (:mode attr)}))
-          children)))))
-
+          children))))
+  (readfile [this inode offset size continuation!]
+    (let [state (deref state-agent)
+          file (get (:file-table state) inode)]
+      (if (nil? file)
+        (continuation! nil)
+        (continuation! (take size (drop offset file)))))))
