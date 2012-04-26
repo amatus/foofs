@@ -29,5 +29,7 @@
             "Return a lazy sequence of directory entries.")
   (readfile [this inode offset size continuation!]
             "Return a ByteBuffer or sequence of bytes.")
+  (mknod [this inode filename mode flags continuation!]
+         "Create an inode and return its attributes.")
   ;; and so on
   )

@@ -16,6 +16,7 @@
 (ns foofs.filesystem
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
         [foofs.fuse.filesystem :only [Filesystem]]
+        foofs.util
         (foofs.fuse jna protocol)))
 
 (defrecord FooFilesystem
@@ -106,13 +107,8 @@
             (fn [state]
               (let [opendirs (:opendirs state)
                     next-handle (:next-handle state)
-                    handle (first
-                             (remove
-                               (partial contains? opendirs)
-                               (concat
-                                 (range next-handle Long/MAX_VALUE)
-                                 (range Long/MIN_VALUE next-handle))))]
-                (.println *err* (str "got handle " handle))
+                    handle (next-key opendirs next-handle Long/MIN_VALUE
+                                     Long/MAX_VALUE)]
                 (if (nil? handle)
                   (do
                     (continuation! errno-nomem)
@@ -162,5 +158,31 @@
           (fn [state]
             {:opendirs (dissoc (:opendirs state) (:handle (:arg request)))
              :next-handle (:next-handle state)})))))
+  (create [this request continuation!]
+    ;; is create supposed to be atomic?
+    (let [arg (:arg request)
+          flags (:flags arg)
+          mode (:mode arg)
+          filename (:filename arg)]
+      (.mknod
+        backend (:nodeid request) filename mode flags
+        (fn [attr]
+          (if (nil? attr)
+            (continuation! errno-noent) ;; other errors?
+            (.reference
+              backend (:inode attr)
+              (fn [result]
+                (if (nil? result)
+                  (continuation! errno-noent)
+                  (continuation!
+                    {:nodeid (:inode attr)
+                     :generation 0
+                     :entry-valid 0
+                     :attr-valid 0
+                     :entry-valid-nsec 0
+                     :attr-valid-nsec 0
+                     :attr attr
+                     :handle 0
+                     :flags 0})))))))))
   (destroy [this request]
     nil))

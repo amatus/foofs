@@ -21,3 +21,8 @@
   (if (nil? _keys)
     (assoc _map _key _val)
     (assoc _map _key (apply assoc-deep (get _map _key) _val _keys))))
+
+(defn next-key
+  [_map _key _min _max]
+  (first (remove (partial contains? _map) (concat (range _key _max)
+                                                  (range _min _key)))))

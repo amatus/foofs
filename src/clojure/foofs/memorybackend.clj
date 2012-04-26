@@ -17,6 +17,21 @@
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
         foofs.util))
 
+(def new-attr
+  {:size 0
+   :blocks 0
+   :atime 0
+   :mtime 0
+   :ctime 0
+   :atimensec 0
+   :mtimensec 0
+   :ctimensec 0
+   :mode 0
+   :nlink 0
+   :uid 0
+   :gid 0
+   :rdev 0})
+
 (defn link-modifier!
   [state-agent f inode continuation! state]
   (let [attr-table (:attr-table state)
@@ -81,4 +96,30 @@
           file (get (:file-table state) inode)]
       (if (nil? file)
         (continuation! nil)
-        (continuation! (take size (drop offset file)))))))
+        (continuation! (take size (drop offset file))))))
+  (mknod [this inode filename mode flags continuation!]
+    (send
+      state-agent
+      (fn [state]
+        (let [lookup-table (:lookup-table state)
+              children (get lookup-table inode)
+              attr-table (:attr-table state)]
+          (if (contains? children filename)
+            (do
+              (continuation! nil) ;; EEXIST?
+              state)
+            (let [child-inode (next-key attr-table (:next-inode state)
+                                        Long/MIN_VALUE Long/MAX_VALUE)
+                  attr (conj new-attr
+                             {:mode mode
+                              :nlink 1})]
+              (send
+                state-agent
+                (fn [state]
+                  (continuation! (assoc attr :inode child-inode))
+                  state))
+              (assoc state
+                     :attr-table (assoc attr-table child-inode attr)
+                     :lookup-table (assoc lookup-table inode
+                                          (assoc children filename child-inode))
+                     :next-inode (inc child-inode)))))))))

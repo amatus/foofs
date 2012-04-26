@@ -424,6 +424,34 @@
         (reply-error! fuse request result)
         (reply-error! fuse request 0)))))
 
+(def parse-create-in
+  (domonad
+    parser-m
+    [flags parse-opaque32
+     mode parse-opaque32
+     filename parse-utf8]
+    {:flags flags
+     :mode mode
+     :filename filename}))
+
+(defn write-create-out
+  [create-out]
+  (domonad state-m
+    [_ (write-entry-out create-out)
+     _ (write-open-out create-out)]
+    nil))
+
+(defn process-create!
+  [fuse request]
+  (.create
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (cond 
+        (map? result) (reply-ok! fuse request (write-create-out result))
+        (integer? result) (reply-error! fuse request result)
+        true (reply-error! fuse request errno-nosys)))))
+
 (defn process-destroy!
   [fuse request]
   (.destroy (:filesystem fuse) request)
@@ -452,6 +480,8 @@
                :processor! process-readdir!}
    op-releasedir {:arg-parser parse-release-in
                   :processor! process-releasedir!}
+   op-create {:arg-parser parse-create-in
+              :processor! process-create!}
    op-destroy {:arg-parser parse-nothing
                :processor! process-destroy!}})
 

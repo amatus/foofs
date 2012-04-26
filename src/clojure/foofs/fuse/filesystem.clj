@@ -27,7 +27,8 @@
   (init [this request] "Initialize filesystem.")
   (opendir [this request continuation!] "Open directory.")
   (readdir [this request continuation!] "Read directory.")
-  (releasedir [this request continuation!] "Release Directory.")
+  (releasedir [this request continuation!] "Release directory.")
+  (create [this request continuation!] "Create file.")
   (destroy [this request] "Clean up filesystem.")
   ;; and so on
   )
