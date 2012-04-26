@@ -50,7 +50,9 @@
     (let [attr-table (:attr-table (deref state-agent))
           attr (get attr-table inode)]
       (.println *err* (str "attr " attr))
-      (continuation! attr)))
+      (if (nil? attr)
+        (continuation! nil)
+        (continuation! (assoc attr :inode inode)))))
   (reference [this inode continuation!]
     (.println *err* (str "reference " inode))
     (send state-agent
