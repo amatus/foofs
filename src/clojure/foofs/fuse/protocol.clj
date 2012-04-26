@@ -366,7 +366,6 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (.println *err* (str "opendir result " result))
       (cond 
         (map? result) (reply-ok! fuse request (write-open-out result))
         (integer? result) (reply-error! fuse request result)

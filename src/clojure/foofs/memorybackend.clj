@@ -51,33 +51,26 @@
   [^clojure.lang.Agent state-agent]
   FilesystemBackend
   (lookup [this inode child continuation!]
-    (.println *err* (str "lookup " inode " " child))
     (let [state (deref state-agent)
           lookup-table (:lookup-table state)
           children (get lookup-table inode)
           child (if (= "" child)
                   inode
                   (get children child))]
-      (.println *err* (str "child " child))
       (continuation! child)))
   (getattr [this inode continuation!]
-    (.println *err* (str "getattr " inode))
     (let [attr-table (:attr-table (deref state-agent))
           attr (get attr-table inode)]
-      (.println *err* (str "attr " attr))
       (if (nil? attr)
         (continuation! nil)
         (continuation! (assoc attr :inode inode)))))
   (reference [this inode continuation!]
-    (.println *err* (str "reference " inode))
     (send state-agent
           (partial link-modifier! state-agent inc inode continuation!)))
   (dereference [this inode continuation!]
-    (.println *err* (str "dereference " inode))
     (send state-agent
           (partial link-modifier! state-agent dec inode continuation!)))
   (clonedir [this inode continuation!]
-    (.println *err* (str "clonedir " inode))
     (let [state (deref state-agent)
           lookup-table (:lookup-table state)
           children (get lookup-table inode)

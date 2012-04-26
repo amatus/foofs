@@ -24,7 +24,6 @@
    ^clojure.lang.Agent readdir-agent]
   Filesystem
   (lookup [this request continuation!]
-    (.println *err* (str "lookup " request))
     (.lookup
       backend (:nodeid request) (:arg request)
       (fn [inode]
@@ -46,7 +45,6 @@
   (forget [this request]
     nil)
   (getattr [this request continuation!]
-    (.println *err* (str "getattr " request))
     (.getattr
       backend (:nodeid request)
       (fn [attr]
@@ -95,11 +93,9 @@
       (partial conj {:opendirs {}
                      :next-handle 0})))
   (opendir [this request continuation!]
-    (.println *err* (str "opendir " request))
     (.reference
       backend (:nodeid request)
       (fn [link]
-        (.println *err* (str "got link " link))
         (if (nil? link)
           (continuation! errno-noent)
           (send
@@ -123,7 +119,6 @@
                     {:opendirs (assoc opendirs handle [])
                      :next-handle (inc handle)})))))))))
   (readdir [this request continuation!]
-    (.println *err* (str "readdir " request))
     (let [arg (:arg request)
           handle (:handle arg)
           offset (:offset arg)
@@ -132,7 +127,6 @@
         (.clonedir
           backend (:nodeid request)
           (fn [dirents]
-            (.println *err* (str "got dirents " dirents))
             (let [encoded-dirents (encode-dirents dirents)]
               (send
                 readdir-agent
