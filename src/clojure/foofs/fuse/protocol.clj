@@ -204,6 +204,29 @@
         (integer? result) (reply-error! fuse request result)
         true (reply-error! fuse request errno-nosys)))))
 
+(def parse-mknod-in
+  (domonad
+    parser-m
+    [mode parse-opaque32
+     rdev parse-opaque32
+     filename parse-utf8]
+    {:mode mode
+     :rdev rdev
+     :filename filename}))
+
+(defn process-mknod!
+  [fuse request]
+  (.mknod
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (cond
+        (map? result) (reply-ok!
+                        fuse
+                        request
+                        (write-entry-out result))
+        (integer? result) (reply-error! fuse request result)))))
+
 (def parse-open-in
   (domonad parser-m
     [flags parse-opaque32
@@ -463,6 +486,8 @@
               :processor! process-forget!}
    op-getattr {:arg-parser parse-nothing
                :processor! process-getattr!}
+   op-mknod {:arg-parser parse-mknod-in
+             :processor! process-mknod!}
    op-open {:arg-parser parse-open-in
             :processor! process-open!}
    op-read {:arg-parser parse-read-in

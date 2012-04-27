@@ -20,6 +20,7 @@
   (lookup [this request continuation!] "Lookup inode.")
   (forget [this request] "I forget.")
   (getattr [this request continuation!] "Get file attributes.")
+  (mknod [this request continuation!] "Create node.")
   (open [this request continuation!] "Open file.")
   (readfile [this request continuation!] "Read file.")
   (statfs [this request continuation!] "Get file system statistics.")

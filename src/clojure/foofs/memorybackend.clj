@@ -90,7 +90,7 @@
       (if (nil? file)
         (continuation! nil)
         (continuation! (take size (drop offset file))))))
-  (mknod [this inode filename mode flags continuation!]
+  (mknod [this inode filename mode continuation!]
     (send
       state-agent
       (fn [state]

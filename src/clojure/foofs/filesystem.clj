@@ -19,6 +19,16 @@
         foofs.util
         (foofs.fuse jna protocol)))
 
+(defn fill-entry
+  [attr]
+  {:nodeid (:inode attr)
+   :generation 0
+   :entry-valid 0
+   :attr-valid 0
+   :entry-valid-nsec 0
+   :attr-valid-nsec 0
+   :attr attr})
+
 (defrecord FooFilesystem
   [^foofs.filesystembackend.FilesystemBackend backend
    ^clojure.lang.Agent readdir-agent]
@@ -34,14 +44,7 @@
             (fn [attr]
               (if (nil? attr)
                 (continuation! errno-noent)
-                (continuation!
-                  {:nodeid inode
-                   :generation 0
-                   :entry-valid 0
-                   :attr-valid 0
-                   :entry-valid-nsec 0
-                   :attr-valid-nsec 0
-                   :attr attr}))))))))
+                (continuation! (fill-entry attr)))))))))
   (forget [this request]
     nil)
   (getattr [this request continuation!]
@@ -51,6 +54,14 @@
         (if (nil? attr)
           (continuation! errno-noent)
           (continuation! attr)))))
+  (mknod [this request continuation!]
+    (let [arg (:arg request)]
+      (.mknod
+        backend (:nodeid request) (:filename arg) (:mode arg)
+        (fn [attr]
+          (if (nil? attr)
+            (continuation! errno-noent) ;; other errors?
+            (continuation! (fill-entry attr)))))))
   (open [this request continuation!]
     (.reference
       backend (:nodeid request)
@@ -154,12 +165,9 @@
              :next-handle (:next-handle state)})))))
   (create [this request continuation!]
     ;; is create supposed to be atomic?
-    (let [arg (:arg request)
-          flags (:flags arg)
-          mode (:mode arg)
-          filename (:filename arg)]
+    (let [arg (:arg request)]
       (.mknod
-        backend (:nodeid request) filename mode flags
+        backend (:nodeid request) (:filename arg) (:mode arg)
         (fn [attr]
           (if (nil? attr)
             (continuation! errno-noent) ;; other errors?
@@ -169,14 +177,8 @@
                 (if (nil? result)
                   (continuation! errno-noent)
                   (continuation!
-                    {:nodeid (:inode attr)
-                     :generation 0
-                     :entry-valid 0
-                     :attr-valid 0
-                     :entry-valid-nsec 0
-                     :attr-valid-nsec 0
-                     :attr attr
-                     :handle 0
-                     :flags 0})))))))))
+                    (assoc (fill-entry attr)
+                           :handle 0
+                           :flags 0))))))))))
   (destroy [this request]
     nil))
