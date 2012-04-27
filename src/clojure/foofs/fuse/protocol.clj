@@ -159,12 +159,9 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (cond
-        (map? result) (reply-ok!
-                        fuse
-                        request
-                        (write-entry-out result))
-        (integer? result) (reply-error! fuse request result)))))
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-entry-out result))))))
 
 (def parse-forget-in
   (domonad
@@ -192,17 +189,13 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (cond 
-        (map? result) (reply-ok!
-                        fuse
-                        request
-                        (domonad
-                         state-m
-                          [_ (write-attr-out 0 0)
-                           _ (write-fuse-attr result)]
-                          nil))
-        (integer? result) (reply-error! fuse request result)
-        true (reply-error! fuse request errno-nosys)))))
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request
+                   (domonad
+                     state-m
+                     [_ (write-attr-out 0 0)
+                      _ (write-fuse-attr result)] nil))))))
 
 (def parse-mknod-in
   (domonad
@@ -220,12 +213,9 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (cond
-        (map? result) (reply-ok!
-                        fuse
-                        request
-                        (write-entry-out result))
-        (integer? result) (reply-error! fuse request result)))))
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-entry-out result))))))
 
 (def parse-open-in
   (domonad parser-m
@@ -248,10 +238,9 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (cond 
-        (map? result) (reply-ok! fuse request (write-open-out result))
-        (integer? result) (reply-error! fuse request result)
-        true (reply-error! fuse request errno-nosys)))))
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-open-out result))))))
 
 (def parse-read-in
   (domonad
@@ -296,10 +285,9 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (cond 
-        (map? result) (reply-ok! fuse request (write-statfs-out result))
-        (integer? result) (reply-error! fuse request result)
-        true (reply-error! fuse request errno-nosys)))))
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-statfs-out result))))))
 
 (def parse-release-in
   (domonad
@@ -316,10 +304,7 @@
   (.release
     (:filesystem fuse)
     request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-error! fuse request 0)))))
+    (partial reply-error! fuse request)))
 
 (def parse-init-in
   (domonad
@@ -389,10 +374,9 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (cond 
-        (map? result) (reply-ok! fuse request (write-open-out result))
-        (integer? result) (reply-error! fuse request result)
-        true (reply-error! fuse request errno-nosys)))))
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-open-out result))))))
 
 (def name-offset 24)
 (defn dirent-align
@@ -441,10 +425,7 @@
   (.releasedir
     (:filesystem fuse)
     request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-error! fuse request 0)))))
+    (partial reply-error! fuse request)))
 
 (def parse-create-in
   (domonad
@@ -469,10 +450,9 @@
     (:filesystem fuse)
     request
     (fn [result]
-      (cond 
-        (map? result) (reply-ok! fuse request (write-create-out result))
-        (integer? result) (reply-error! fuse request result)
-        true (reply-error! fuse request errno-nosys)))))
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-create-out result))))))
 
 (defn process-destroy!
   [fuse request]

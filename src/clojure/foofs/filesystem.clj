@@ -96,7 +96,7 @@
       (fn [link]
         (if (nil? link)
           (continuation! errno-noent)
-          (continuation! nil)))))
+          (continuation! 0)))))
   (init [this request]
     (.println *err* "init called")
     (send
@@ -157,7 +157,7 @@
       (fn [link]
         (if (nil? link)
           (continuation! errno-noent)
-          (continuation! nil))
+          (continuation! 0))
         (send
           readdir-agent
           (fn [state]
