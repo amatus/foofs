@@ -59,8 +59,29 @@
       (.mknod
         backend (:nodeid request) (:filename arg) (:mode arg)
         (fn [attr]
-          (if (nil? attr)
-            (continuation! errno-noent) ;; other errors?
+          (if (integer? attr)
+            (continuation! attr)
+            (continuation! (fill-entry attr)))))))
+  (mkdir [this request continuation!]
+    (let [arg (:arg request)]
+      (.mknod
+        backend (:nodeid request) (:filename arg)
+        (bit-or stat-type-directory (:mode arg))
+        (fn [attr]
+          (if (integer? attr)
+            (continuation! attr)
+            (let [inode (:inode attr)]
+              ;; do we need to wait for these to finish?
+              (.link backend inode "." inode skip)
+              (.link backend inode ".." (:nodeid request) skip)
+              (continuation! (fill-entry attr))))))))
+  (link [this request continuation!]
+    (let [arg (:arg request)]
+      (.link
+        backend (:nodeid request) (:filename arg) (:target-inode arg)
+        (fn [attr]
+          (if (integer? attr)
+            (continuation! attr)
             (continuation! (fill-entry attr)))))))
   (open [this request continuation!]
     (.reference
@@ -169,8 +190,8 @@
       (.mknod
         backend (:nodeid request) (:filename arg) (:mode arg)
         (fn [attr]
-          (if (nil? attr)
-            (continuation! errno-noent) ;; other errors?
+          (if (integer? attr)
+            (continuation! attr)
             (.reference
               backend (:inode attr)
               (fn [result]

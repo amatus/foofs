@@ -217,6 +217,43 @@
         (reply-error! fuse request result)
         (reply-ok! fuse request (write-entry-out result))))))
 
+(def parse-mkdir-in
+  (domonad
+    parser-m
+    [mode parse-opaque32
+     _ skip-32
+     filename parse-utf8]
+    {:mode mode
+     :filename filename}))
+
+(defn process-mkdir!
+  [fuse request]
+  (.mkdir
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-entry-out result))))))
+
+(def parse-link-in
+  (domonad
+    parser-m
+    [target-inode parse-opaque64
+     filename parse-utf8]
+    {:target-inode target-inode
+     :filename filename}))
+
+(defn process-link!
+  [fuse request]
+  (.link
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (write-entry-out result))))))
+  
 (def parse-open-in
   (domonad parser-m
     [flags parse-opaque32
@@ -468,6 +505,10 @@
                :processor! process-getattr!}
    op-mknod {:arg-parser parse-mknod-in
              :processor! process-mknod!}
+   op-mkdir {:arg-parser parse-mkdir-in
+             :processor! process-mkdir!}
+   op-link {:arg-parser parse-link-in
+            :processor! process-link!}
    op-open {:arg-parser parse-open-in
             :processor! process-open!}
    op-read {:arg-parser parse-read-in

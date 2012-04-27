@@ -15,6 +15,7 @@
 
 (ns foofs.memorybackend
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
+        foofs.fuse.jna
         foofs.util))
 
 (def new-attr
@@ -99,7 +100,7 @@
               attr-table (:attr-table state)]
           (if (contains? children filename)
             (do
-              (continuation! nil) ;; EEXIST?
+              (continuation! errno-exist)
               state)
             (let [child-inode (next-key attr-table (:next-inode state)
                                         Long/MIN_VALUE Long/MAX_VALUE)
@@ -115,4 +116,33 @@
                      :attr-table (assoc attr-table child-inode attr)
                      :lookup-table (assoc lookup-table inode
                                           (assoc children filename child-inode))
-                     :next-inode (inc child-inode)))))))))
+                     :next-inode (inc child-inode))))))))
+  (link [this inode filename target-inode continuation!]
+    (send
+      state-agent
+      (fn [state]
+        (let [lookup-table (:lookup-table state)
+              attr-table (:attr-table state)
+              children (get lookup-table inode)
+              dir-attr (get attr-table inode)
+              attr (get attr-table target-inode)]
+          (if (contains? children filename)
+            (do (continuation! errno-exist) state)
+            (if (not (= stat-type-directory
+                        (bit-and stat-type-mask (:mode dir-attr))))
+              (do (continuation! errno-notdir) state)
+              (if (nil? attr)
+                (do (continuation! errno-noent) state)
+                (do
+                  (send
+                    state-agent
+                    (fn [state]
+                      (continuation! (assoc attr :inode target-inode))
+                      state))
+                  (assoc state
+                         :attr-table (assoc attr-table target-inode
+                                            (assoc attr :nlink
+                                                   (inc (:nlink attr))))
+                         :lookup-table (assoc lookup-table inode
+                                              (assoc children filename
+                                                     target-inode))))))))))))

@@ -31,5 +31,7 @@
             "Return a ByteBuffer or sequence of bytes.")
   (mknod [this inode filename mode continuation!]
          "Create an inode and return its attributes.")
+  (link [this inode filename target-inode continuation!]
+        "Create a hardlink and return the target's attributes.")
   ;; and so on
   )

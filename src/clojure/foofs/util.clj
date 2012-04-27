@@ -26,3 +26,6 @@
   [_map _key _min _max]
   (first (remove (partial contains? _map) (concat (range _key _max)
                                                   (range _min _key)))))
+
+(defn skip
+  [& _])

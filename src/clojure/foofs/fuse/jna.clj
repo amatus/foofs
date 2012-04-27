@@ -140,6 +140,8 @@
   (do
     (def errno-noent 2)
     (def errno-nomem 12)
+    (def errno-exist 17)
+    (def errno-notdir 20)
     (def errno-inval 22)
     (def errno-nosys 38)
     (def errno-proto 71)
@@ -160,6 +162,8 @@
   (do
     (def errno-noent 2)
     (def errno-nomem 12)
+    (def errno-exist 17)
+    (def errno-notdir 20)
     (def errno-inval 22)
     (def errno-nosys 78)
     (def errno-proto 92)))
