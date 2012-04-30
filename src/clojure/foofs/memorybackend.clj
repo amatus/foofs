@@ -145,4 +145,34 @@
                                                    (inc (:nlink attr))))
                          :lookup-table (assoc lookup-table inode
                                               (assoc children filename
-                                                     target-inode))))))))))))
+                                                     target-inode)))))))))))
+  (unlink [this inode filename continuation!]
+    (send
+      state-agent
+      (fn [state]
+        (let [lookup-table (:lookup-table state)
+              attr-table (:attr-table state)
+              children (get lookup-table inode)
+              child-inode (get children filename)
+              dir-attr (get attr-table inode)]
+          (if (not (= stat-type-directory
+                      (bit-and stat-type-mask (:mode dir-attr))))
+            (do (continuation! errno-notdir) state)
+            (if (nil? child-inode)
+              (do (continuation! errno-noent) state)
+              (let [child-attr (get attr-table child-inode)
+                    nlink (dec (:nlink child-attr))]
+                (if (= stat-type-directory
+                       (bit-and stat-type-mask (:mode child-attr)))
+                  (do (continuation! errno-isdir) state)
+                  (do
+                    (continuation! 0)
+                    (assoc state
+                           :lookup-table (assoc lookup-table inode
+                                                (dissoc children filename))
+                           :attr-table (if (zero? nlink)
+                                         (dissoc attr-table child-inode)
+                                         (assoc
+                                           attr-table child-inode
+                                           (assoc child-attr
+                                                  :nlink nlink))))))))))))))

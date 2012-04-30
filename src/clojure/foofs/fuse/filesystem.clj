@@ -22,6 +22,7 @@
   (getattr [this request continuation!] "Get file attributes.")
   (mknod [this request continuation!] "Create node.")
   (mkdir [this request continuation!] "Create directory.")
+  (unlink [this request continuation!] "Unlink a file.")
   (link [this request continuation!] "Create hardlink.")
   (open [this request continuation!] "Open file.")
   (readfile [this request continuation!] "Read file.")

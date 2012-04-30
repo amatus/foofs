@@ -33,5 +33,7 @@
          "Create an inode and return its attributes.")
   (link [this inode filename target-inode continuation!]
         "Create a hardlink and return the target's attributes.")
+  (unlink [this inode filename continuation!]
+          "Unlink a file.")
   ;; and so on
   )

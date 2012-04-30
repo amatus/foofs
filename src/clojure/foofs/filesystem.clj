@@ -75,6 +75,8 @@
               (.link backend inode "." inode skip)
               (.link backend inode ".." (:nodeid request) skip)
               (continuation! (fill-entry attr))))))))
+  (unlink [this request continuation!]
+    (.unlink backend (:nodeid request) (:arg request) continuation!))
   (link [this request continuation!]
     (let [arg (:arg request)]
       (.link

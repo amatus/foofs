@@ -118,8 +118,6 @@
      :gid gid
      :pid pid}))
 
-(def parse-lookup-in parse-utf8)
-
 (defn write-fuse-attr
   [attr]
   (domonad
@@ -235,6 +233,13 @@
       (if (integer? result)
         (reply-error! fuse request result)
         (reply-ok! fuse request (write-entry-out result))))))
+
+(defn process-unlink!
+  [fuse request]
+  (.unlink
+    (:filesystem fuse)
+    request
+    (partial reply-error! fuse request)))
 
 (def parse-link-in
   (domonad
@@ -497,7 +502,7 @@
   (c-close (:fd fuse)))
 
 (def ops
-  {op-lookup {:arg-parser parse-lookup-in
+  {op-lookup {:arg-parser parse-utf8
               :processor! process-lookup!}
    op-forget {:arg-parser parse-forget-in
               :processor! process-forget!}
@@ -507,6 +512,8 @@
              :processor! process-mknod!}
    op-mkdir {:arg-parser parse-mkdir-in
              :processor! process-mkdir!}
+   op-unlink {:arg-parser parse-utf8
+              :processor! process-unlink!}
    op-link {:arg-parser parse-link-in
             :processor! process-link!}
    op-open {:arg-parser parse-open-in
