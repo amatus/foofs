@@ -145,6 +145,7 @@
     (def errno-isdir 21)
     (def errno-inval 22)
     (def errno-nosys 38)
+    (def errno-notempty 39)
     (def errno-proto 71)
     (def pf-unix 1)
     (def sock-stream 1)

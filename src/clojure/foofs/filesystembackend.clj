@@ -35,5 +35,7 @@
         "Create a hardlink and return the target's attributes.")
   (unlink [this inode filename continuation!]
           "Unlink a file.")
+  (rmdir [this inode filename continuation!]
+         "Remove an empty directory.")
   ;; and so on
   )

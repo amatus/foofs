@@ -241,6 +241,13 @@
     request
     (partial reply-error! fuse request)))
 
+(defn process-rmdir!
+  [fuse request]
+  (.rmdir
+    (:filesystem fuse)
+    request
+    (partial reply-error! fuse request)))
+
 (def parse-link-in
   (domonad
     parser-m
@@ -514,6 +521,8 @@
              :processor! process-mkdir!}
    op-unlink {:arg-parser parse-utf8
               :processor! process-unlink!}
+   op-rmdir {:arg-parser parse-utf8
+             :processor! process-rmdir!}
    op-link {:arg-parser parse-link-in
             :processor! process-link!}
    op-open {:arg-parser parse-open-in

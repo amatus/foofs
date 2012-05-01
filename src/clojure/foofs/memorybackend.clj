@@ -160,12 +160,11 @@
             (do (continuation! errno-notdir) state)
             (if (nil? child-inode)
               (do (continuation! errno-noent) state)
-              (let [child-attr (get attr-table child-inode)
-                    nlink (dec (:nlink child-attr))]
+              (let [child-attr (get attr-table child-inode)]
                 (if (= stat-type-directory
                        (bit-and stat-type-mask (:mode child-attr)))
                   (do (continuation! errno-isdir) state)
-                  (do
+                  (let [nlink (dec (:nlink child-attr))]
                     (continuation! 0)
                     (assoc state
                            :lookup-table (assoc lookup-table inode
@@ -175,4 +174,38 @@
                                          (assoc
                                            attr-table child-inode
                                            (assoc child-attr
-                                                  :nlink nlink))))))))))))))
+                                                  :nlink nlink)))))))))))))
+  (rmdir [this inode filename continuation!]
+    (send
+      state-agent
+      (fn [state]
+        (let [lookup-table (:lookup-table state)
+              attr-table (:attr-table state)
+              children (get lookup-table inode)
+              child-inode (get children filename)
+              dir-attr (get attr-table inode)]
+          (if (not (= stat-type-directory
+                      (bit-and stat-type-mask (:mode dir-attr))))
+            (do (continuation! errno-notdir) state)
+            (if (nil? child-inode)
+              (do (continuation! errno-noent) state)
+              (let [child-attr (get attr-table child-inode)
+                    child-children (get lookup-table child-inode)]
+                (if (not (= stat-type-directory
+                            (bit-and stat-type-mask (:mode child-attr))))
+                  (do (continuation! errno-notdir) state)
+                  (if (not (empty? (dissoc child-children "." "..")))
+                    (do (continuation! errno-notempty) state)
+                    (let [nlink (- (:nlink child-attr) 3)]
+                      (continuation! 0)
+                      (assoc state
+                             :lookup-table (dissoc
+                                             (assoc lookup-table inode
+                                                    (dissoc children filename))
+                                             child-inode)
+                             :attr-table (if (zero? nlink)
+                                           (dissoc attr-table child-inode)
+                                           (assoc
+                                             attr-table child-inode
+                                             (assoc child-attr
+                                                    :nlink nlink)))))))))))))))

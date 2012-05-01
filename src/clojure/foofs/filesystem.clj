@@ -77,6 +77,8 @@
               (continuation! (fill-entry attr))))))))
   (unlink [this request continuation!]
     (.unlink backend (:nodeid request) (:arg request) continuation!))
+  (rmdir [this request continuation!]
+    (.rmdir backend (:nodeid request) (:arg request) continuation!))
   (link [this request continuation!]
     (let [arg (:arg request)]
       (.link
