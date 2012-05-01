@@ -151,16 +151,6 @@
      _ (write-fuse-attr (:attr entry-out))]
     nil))
 
-(defn process-lookup!
-  [fuse request]
-  (.lookup
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-entry-out result))))))
-
 (def parse-forget-in
   (domonad
     parser-m
@@ -181,20 +171,6 @@
      _ (pad 4)]
     nil))
 
-(defn process-getattr!
-  [fuse request]
-  (.getattr
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request
-                   (domonad
-                     state-m
-                     [_ (write-attr-out 0 0)
-                      _ (write-fuse-attr result)] nil))))))
-
 (def parse-mknod-in
   (domonad
     parser-m
@@ -205,16 +181,6 @@
      :rdev rdev
      :filename filename}))
 
-(defn process-mknod!
-  [fuse request]
-  (.mknod
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-entry-out result))))))
-
 (def parse-mkdir-in
   (domonad
     parser-m
@@ -224,30 +190,6 @@
     {:mode mode
      :filename filename}))
 
-(defn process-mkdir!
-  [fuse request]
-  (.mkdir
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-entry-out result))))))
-
-(defn process-unlink!
-  [fuse request]
-  (.unlink
-    (:filesystem fuse)
-    request
-    (partial reply-error! fuse request)))
-
-(defn process-rmdir!
-  [fuse request]
-  (.rmdir
-    (:filesystem fuse)
-    request
-    (partial reply-error! fuse request)))
-
 (def parse-link-in
   (domonad
     parser-m
@@ -256,16 +198,6 @@
     {:target-inode target-inode
      :filename filename}))
 
-(defn process-link!
-  [fuse request]
-  (.link
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-entry-out result))))))
-  
 (def parse-open-in
   (domonad parser-m
     [flags parse-opaque32
@@ -281,16 +213,6 @@
      _ (pad 4)]
     nil))
 
-(defn process-open!
-  [fuse request]
-  (.open
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-open-out result))))))
-
 (def parse-read-in
   (domonad
     parser-m
@@ -302,16 +224,6 @@
      :offset offset
      :size size
      :read-flags read-flags}))
-
-(defn process-read!
-  [fuse request]
-  (.readfile
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-bytes result))))))
 
 (defn write-statfs-out
   [statfs-out]
@@ -328,16 +240,6 @@
      _ (pad 28)]
     nil))
  
-(defn process-statfs!
-  [fuse request]
-  (.statfs
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-statfs-out result))))))
-
 (def parse-release-in
   (domonad
     parser-m
@@ -347,13 +249,6 @@
     {:handle handle
      :flags flags
      :release-flags release-flags}))
-
-(defn process-release!
-  [fuse request]
-  (.release
-    (:filesystem fuse)
-    request
-    (partial reply-error! fuse request)))
 
 (def parse-init-in
   (domonad
@@ -417,16 +312,6 @@
          :nop)
      ] nil))
 
-(defn process-opendir!
-  [fuse request]
-  (.opendir
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-open-out result))))))
-
 (def name-offset 24)
 (defn dirent-align
   [x]
@@ -459,16 +344,6 @@
                  [[] 0]
                  dirents)))
 
-(defn process-readdir!
-  [fuse request]
-  (.readdir
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-bytes result))))))
-
 (defn process-releasedir!
   [fuse request]
   (.releasedir
@@ -493,56 +368,76 @@
      _ (write-open-out create-out)]
     nil))
 
-(defn process-create!
-  [fuse request]
-  (.create
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (write-create-out result))))))
-
 (defn process-destroy!
   [fuse request]
   (.destroy (:filesystem fuse) request)
   (c-close (:fd fuse)))
 
+(defn process-generic!
+  [filesystem-fn result-fn fuse request]
+  (filesystem-fn
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (result-fn result))))))
+
 (def ops
   {op-lookup {:arg-parser parse-utf8
-              :processor! process-lookup!}
+              :processor! (partial process-generic!
+                                   #(.lookup %1 %2 %3) write-entry-out)}
    op-forget {:arg-parser parse-forget-in
               :processor! process-forget!}
    op-getattr {:arg-parser parse-nothing
-               :processor! process-getattr!}
+               :processor! (partial
+                             process-generic!
+                             #(.getattr %1 %2 %3)
+                             (fn [result]
+                               (domonad
+                                 state-m
+                                 [_ (write-attr-out 0 0)
+                                  _ (write-fuse-attr result)] nil)))}
    op-mknod {:arg-parser parse-mknod-in
-             :processor! process-mknod!}
+             :processor! (partial process-generic!
+                                  #(.mknod %1 %2 %3) write-entry-out)}
    op-mkdir {:arg-parser parse-mkdir-in
-             :processor! process-mkdir!}
+             :processor! (partial process-generic!
+                                  #(.mkdir %1 %2 %3) write-entry-out)}
    op-unlink {:arg-parser parse-utf8
-              :processor! process-unlink!}
+              :processor! (partial process-generic!
+                                   #(.unlink %1 %2 %3) write-nothing)}
    op-rmdir {:arg-parser parse-utf8
-             :processor! process-rmdir!}
+             :processor! (partial process-generic!
+                                  #(.rmdir %1 %2 %3) write-nothing)}
    op-link {:arg-parser parse-link-in
-            :processor! process-link!}
+            :processor! (partial process-generic!
+                                 #(.link %1 %2 %3) write-entry-out)}
    op-open {:arg-parser parse-open-in
-            :processor! process-open!}
+            :processor! (partial process-generic!
+                                 #(.open %1 %2 %3) write-open-out)}
    op-read {:arg-parser parse-read-in
-            :processor! process-read!}
+            :processor! (partial process-generic!
+                                 #(.readfile %1 %2 %3) write-bytes)}
    op-statfs {:arg-parser parse-nothing
-              :processor! process-statfs!}
+              :processor! (partial process-generic!
+                                   #(.statfs %1 %2 %3) write-statfs-out)}
    op-release {:arg-parser parse-release-in
-               :processor! process-release!}
+               :processor! (partial process-generic!
+                                    #(.release %1 %2 %3) write-nothing)}
    op-init {:arg-parser parse-init-in
             :processor! process-init!}
    op-opendir {:arg-parser parse-open-in
-               :processor! process-opendir!}
+               :processor! (partial process-generic!
+                                    #(.opendir %1 %2 %3) write-open-out)}
    op-readdir {:arg-parser parse-read-in
-               :processor! process-readdir!}
+               :processor! (partial process-generic!
+                                    #(.readdir %1 %2 %3) write-bytes)}
    op-releasedir {:arg-parser parse-release-in
                   :processor! process-releasedir!}
    op-create {:arg-parser parse-create-in
-              :processor! process-create!}
+              :processor! (partial process-generic!
+                                   #(.create %1 %2 %3) write-create-out)}
    op-destroy {:arg-parser parse-nothing
                :processor! process-destroy!}})
 
