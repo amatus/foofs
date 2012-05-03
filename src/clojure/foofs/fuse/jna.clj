@@ -222,6 +222,6 @@
     (.setInt msg offsetof-msg_iovlen (.size iov))
     (.setPointer msg offsetof-msg_control ccmsg)
     (.setInt msg offsetof-msg_controllen (.size ccmsg))
-    (let [rv (recvmsg sockfd msg 0)]
-      (when (and (< 0 rv) (== scm-rights (.getInt ccmsg 8)))
-        (.getInt ccmsg 12)))))
+    (recvmsg sockfd msg 0) ;; WTF: even when this returns -1 it seems to work
+    (when (== scm-rights (.getInt ccmsg 8))
+      (.getInt ccmsg 12))))
