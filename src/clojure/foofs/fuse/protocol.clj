@@ -118,58 +118,11 @@
      :gid gid
      :pid pid}))
 
-(defn write-fuse-attr
-  [attr]
-  (domonad
-    state-m
-    [_ (write-int64 (:inode attr))
-     _ (write-int64 (:size attr))
-     _ (write-int64 (:blocks attr))
-     _ (write-int64 (:atime attr))
-     _ (write-int64 (:mtime attr))
-     _ (write-int64 (:ctime attr))
-     _ (write-int32 (:atimensec attr))
-     _ (write-int32 (:mtimensec attr))
-     _ (write-int32 (:ctimensec attr))
-     _ (write-int32 (:mode attr))
-     _ (write-int32 (:nlink attr))
-     _ (write-int32 (:uid attr))
-     _ (write-int32 (:gid attr))
-     _ (write-int32 (:rdev attr))]
-    nil))
-
-(defn write-entry-out
-  [entry-out]
-  (domonad
-    state-m
-    [_ (write-int64 (:nodeid entry-out))
-     _ (write-int64 (:generation entry-out))
-     _ (write-int64 (:entry-valid entry-out))
-     _ (write-int64 (:attr-valid entry-out))
-     _ (write-int32 (:entry-valid-nsec entry-out))
-     _ (write-int32 (:attr-valid-nsec entry-out))
-     _ (write-fuse-attr (:attr entry-out))]
-    nil))
-
 (def parse-forget-in
   (domonad
     parser-m
     [nlookup parse-uint64]
     nlookup))
-
-(defn process-forget!
-  [fuse request]
-  (.forget (:filesystem fuse) request)
-  (reply-ok! fuse request write-nothing))
-
-(defn write-attr-out
-  [valid valid-nsec]
-  (domonad
-    state-m
-    [_ (write-int64 valid)
-     _ (write-int32 valid-nsec)
-     _ (pad 4)]
-    nil))
 
 (def parse-mknod-in
   (domonad
@@ -204,15 +157,6 @@
      _ skip-32]
     flags))
 
-(defn write-open-out
-  [open-out]
-  (domonad
-    state-m
-    [_ (write-int64 (:handle open-out))
-     _ (write-int32 (:flags open-out))
-     _ (pad 4)]
-    nil))
-
 (def parse-read-in
   (domonad
     parser-m
@@ -225,21 +169,6 @@
      :size size
      :read-flags read-flags}))
 
-(defn write-statfs-out
-  [statfs-out]
-  (domonad
-    state-m
-    [_ (write-int64 (:blocks statfs-out))
-     _ (write-int64 (:bfree statfs-out))
-     _ (write-int64 (:bavail statfs-out))
-     _ (write-int64 (:files statfs-out))
-     _ (write-int64 (:ffree statfs-out))
-     _ (write-int32 (:bsize statfs-out))
-     _ (write-int32 (:namelen statfs-out))
-     _ (write-int32 (:frsize statfs-out))
-     _ (pad 28)]
-    nil))
- 
 (def parse-release-in
   (domonad
     parser-m
@@ -262,6 +191,82 @@
      :max-readahead max-readahead
      :flags flags}))
 
+(def parse-create-in
+  (domonad
+    parser-m
+    [flags parse-opaque32
+     mode parse-opaque32
+     filename parse-utf8]
+    {:flags flags
+     :mode mode
+     :filename filename}))
+
+(defn write-fuse-attr
+  [attr]
+  (domonad
+    state-m
+    [_ (write-int64 (:inode attr))
+     _ (write-int64 (:size attr))
+     _ (write-int64 (:blocks attr))
+     _ (write-int64 (:atime attr))
+     _ (write-int64 (:mtime attr))
+     _ (write-int64 (:ctime attr))
+     _ (write-int32 (:atimensec attr))
+     _ (write-int32 (:mtimensec attr))
+     _ (write-int32 (:ctimensec attr))
+     _ (write-int32 (:mode attr))
+     _ (write-int32 (:nlink attr))
+     _ (write-int32 (:uid attr))
+     _ (write-int32 (:gid attr))
+     _ (write-int32 (:rdev attr))]
+    nil))
+
+(defn write-entry-out
+  [entry-out]
+  (domonad
+    state-m
+    [_ (write-int64 (:nodeid entry-out))
+     _ (write-int64 (:generation entry-out))
+     _ (write-int64 (:entry-valid entry-out))
+     _ (write-int64 (:attr-valid entry-out))
+     _ (write-int32 (:entry-valid-nsec entry-out))
+     _ (write-int32 (:attr-valid-nsec entry-out))
+     _ (write-fuse-attr (:attr entry-out))]
+    nil))
+
+(defn write-attr-out
+  [valid valid-nsec]
+  (domonad
+    state-m
+    [_ (write-int64 valid)
+     _ (write-int32 valid-nsec)
+     _ (pad 4)]
+    nil))
+
+(defn write-open-out
+  [open-out]
+  (domonad
+    state-m
+    [_ (write-int64 (:handle open-out))
+     _ (write-int32 (:flags open-out))
+     _ (pad 4)]
+    nil))
+
+(defn write-statfs-out
+  [statfs-out]
+  (domonad
+    state-m
+    [_ (write-int64 (:blocks statfs-out))
+     _ (write-int64 (:bfree statfs-out))
+     _ (write-int64 (:bavail statfs-out))
+     _ (write-int64 (:files statfs-out))
+     _ (write-int64 (:ffree statfs-out))
+     _ (write-int32 (:bsize statfs-out))
+     _ (write-int32 (:namelen statfs-out))
+     _ (write-int32 (:frsize statfs-out))
+     _ (pad 28)]
+    nil))
+
 (defn write-init-out
   [init-out]
   (domonad state-m
@@ -273,6 +278,28 @@
      _ (write-int16 (:congestion-threshold init-out))
      _ (write-int32 (:max-write init-out))]
     nil))
+
+(defn write-create-out
+  [create-out]
+  (domonad state-m
+    [_ (write-entry-out create-out)
+     _ (write-open-out create-out)]
+    nil))
+
+(defn process-generic!
+  [filesystem-fn result-fn fuse request]
+  (filesystem-fn
+    (:filesystem fuse)
+    request
+    (fn [result]
+      (if (integer? result)
+        (reply-error! fuse request result)
+        (reply-ok! fuse request (result-fn result))))))
+
+(defn process-forget!
+  [fuse request]
+  (.forget (:filesystem fuse) request)
+  (reply-ok! fuse request write-nothing))
 
 (defn process-init!
   [fuse request]
@@ -312,38 +339,6 @@
          :nop)
      ] nil))
 
-(def name-offset 24)
-(defn dirent-align
-  [x]
-  (* 8 (quot (+ x 7) 8)))
-
-(defn encode-dirent
-  [dirent offset]
-  (let [namebytes (.getBytes (:name dirent) "UTF-8")
-        namelen (count namebytes)
-        entsize (dirent-align (+ name-offset namelen))]
-    (take
-      entsize
-      (concat
-        (encode-int64 (:nodeid dirent))
-        (encode-int64 (+ offset entsize))
-        (encode-int32 namelen)
-        (encode-int32 (bit-shift-right (bit-and stat-type-mask (:type dirent))
-                                       12))
-        namebytes
-        (repeat 0)))))
-
-(defn encode-dirents
-  [dirents]
-  (first (reduce (fn
-                   [state dirent]
-                   (let [[encoded-dirents offset] state
-                         encoded-dirent (encode-dirent dirent offset)]
-                     [(concat encoded-dirents encoded-dirent)
-                      (+ offset (count encoded-dirent))]))
-                 [[] 0]
-                 dirents)))
-
 (defn process-releasedir!
   [fuse request]
   (.releasedir
@@ -351,37 +346,10 @@
     request
     (partial reply-error! fuse request)))
 
-(def parse-create-in
-  (domonad
-    parser-m
-    [flags parse-opaque32
-     mode parse-opaque32
-     filename parse-utf8]
-    {:flags flags
-     :mode mode
-     :filename filename}))
-
-(defn write-create-out
-  [create-out]
-  (domonad state-m
-    [_ (write-entry-out create-out)
-     _ (write-open-out create-out)]
-    nil))
-
 (defn process-destroy!
   [fuse request]
   (.destroy (:filesystem fuse) request)
   (c-close (:fd fuse)))
-
-(defn process-generic!
-  [filesystem-fn result-fn fuse request]
-  (filesystem-fn
-    (:filesystem fuse)
-    request
-    (fn [result]
-      (if (integer? result)
-        (reply-error! fuse request result)
-        (reply-ok! fuse request (result-fn result))))))
 
 (def ops
   {op-lookup {:arg-parser parse-utf8
@@ -464,3 +432,34 @@
          :nop)
      _ ((:processor! op) fuse (assoc request :arg (first argx)))] nil))
 
+(def name-offset 24)
+(defn dirent-align
+  [x]
+  (* 8 (quot (+ x 7) 8)))
+
+(defn encode-dirent
+  [dirent offset]
+  (let [namebytes (.getBytes (:name dirent) "UTF-8")
+        namelen (count namebytes)
+        entsize (dirent-align (+ name-offset namelen))]
+    (take
+      entsize
+      (concat
+        (encode-int64 (:nodeid dirent))
+        (encode-int64 (+ offset entsize))
+        (encode-int32 namelen)
+        (encode-int32 (bit-shift-right (bit-and stat-type-mask (:type dirent))
+                                       12))
+        namebytes
+        (repeat 0)))))
+
+(defn encode-dirents
+  [dirents]
+  (first (reduce (fn
+                   [state dirent]
+                   (let [[encoded-dirents offset] state
+                         encoded-dirent (encode-dirent dirent offset)]
+                     [(concat encoded-dirents encoded-dirent)
+                      (+ offset (count encoded-dirent))]))
+                 [[] 0]
+                 dirents)))
