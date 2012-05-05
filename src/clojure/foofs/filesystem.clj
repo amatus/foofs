@@ -29,6 +29,7 @@
    :attr-valid-nsec 0
    :attr attr})
 
+;; TODO - make use of argument destructuring
 (defrecord FooFilesystem
   [^foofs.filesystembackend.FilesystemBackend backend
    ^clojure.lang.Agent readdir-agent]
@@ -53,7 +54,73 @@
       (fn [attr]
         (if (nil? attr)
           (continuation! errno-noent)
-          (continuation! attr)))))
+          (continuation! (assoc attr :valid 0 :valid-nsec 0))))))
+  (setattr [this request continuation!]
+    (let [nodeid (:nodeid request)
+          arg (:arg request)
+          valid (:valid arg)
+          set-mode! (fn [next!]
+                     (if (bit-test valid setattr-valid-mode)
+                       (.chmod
+                         backend nodeid (:mode arg)
+                         (fn [result]
+                           (if (integer? result)
+                             (continuation! result)
+                             (next!))))
+                       (next!)))
+          set-uid! (fn [next!]
+                     (if (bit-test valid setattr-valid-uid)
+                       (.setuid
+                         backend nodeid (:uid arg)
+                         (fn [result]
+                           (if (integer? result)
+                             (continuation! result)
+                             (next!))))
+                       (next!)))
+          set-gid! (fn [next!]
+                     (if (bit-test valid setattr-valid-gid)
+                       (.setgid
+                         backend nodeid (:gid arg)
+                         (fn [result]
+                           (if (integer? result)
+                             (continuation! result)
+                             (next!))))
+                       (next!)))
+          truncate! (fn [next!]
+                      (if (bit-test valid setattr-valid-size)
+                        (.truncate
+                          backend nodeid (:size arg)
+                          (fn [result]
+                            (if (integer? result)
+                              (continuation! result)
+                              (next!))))
+                        (next!)))
+          set-atime! (fn [next!]
+                       (if (bit-test valid setattr-valid-atime)
+                         (.setatime
+                           backend nodeid (:atime arg) (:atimensec arg)
+                           (fn [result]
+                             (if (integer? result)
+                               (continuation! result)
+                               (next!))))
+                         (next!)))
+          set-mtime! (fn [next!]
+                       (if (bit-test valid setattr-valid-mtime)
+                         (.setmtime
+                           backend nodeid (:mtime arg) (:mtimensec arg)
+                           (fn [result]
+                             (if (integer? result)
+                               (continuation! result)
+                               (next!))))
+                         (next!)))]
+      (chain
+        set-mode!
+        set-uid!
+        set-gid!
+        truncate!
+        set-atime!
+        set-mtime!
+        #(.getattr this request continuation!))))
   (mknod [this request continuation!]
     (let [arg (:arg request)]
       (.mknod

@@ -21,6 +21,15 @@
 (def fuse-version-major 7)
 (def fuse-version-minor 8)
 (def fuse-root-id 1)
+(def setattr-valid-mode (bit-shift-left 1 0))
+(def setattr-valid-uid (bit-shift-left 1 1))
+(def setattr-valid-gid (bit-shift-left 1 2))
+(def setattr-valid-size (bit-shift-left 1 3))
+(def setattr-valid-atime (bit-shift-left 1 4))
+(def setattr-valid-mtime (bit-shift-left 1 5))
+(def setattr-valid-handle (bit-shift-left 1 6))
+(def setattr-valid-atime-now (bit-shift-left 1 7))
+(def setattr-valid-mtime-now (bit-shift-left 1 8))
 
 (def op-lookup       1)
 (def op-forget       2)
@@ -123,6 +132,36 @@
     parser-m
     [nlookup parse-uint64]
     nlookup))
+
+(def parse-setattr-in
+  (domonad
+    parser-m
+    [valid parse-opaque32
+     _ skip-32
+     handle parse-opaque64
+     size parse-uint64
+     _ skip-64
+     atime parse-opaque64
+     mtime parse-opaque64
+     _ skip-64
+     atimensec parse-opaque32
+     mtimensec parse-opaque32
+     _ skip-32
+     mode parse-opaque32
+     _ skip-32
+     uid parse-opaque32
+     gid parse-opaque32
+     _ skip-32]
+    {:valid valid
+     :handle handle
+     :size size
+     :atime atime
+     :mtime mtime
+     :atimensec atimensec
+     :mtimensec mtimensec
+     :mode mode
+     :uid uid
+     :gid gid}))
 
 (def parse-mknod-in
   (domonad
@@ -235,12 +274,13 @@
     nil))
 
 (defn write-attr-out
-  [valid valid-nsec]
+  [attr-out]
   (domonad
     state-m
-    [_ (write-int64 valid)
-     _ (write-int32 valid-nsec)
-     _ (pad 4)]
+    [_ (write-int64 (:valid attr-out))
+     _ (write-int32 (:valid-nsec attr-out))
+     _ (pad 4)
+     _ (write-fuse-attr attr-out)]
     nil))
 
 (defn write-open-out
@@ -358,14 +398,11 @@
    op-forget {:arg-parser parse-forget-in
               :processor! process-forget!}
    op-getattr {:arg-parser parse-nothing
-               :processor! (partial
-                             process-generic!
-                             #(.getattr %1 %2 %3)
-                             (fn [result]
-                               (domonad
-                                 state-m
-                                 [_ (write-attr-out 0 0)
-                                  _ (write-fuse-attr result)] nil)))}
+               :processor! (partial process-generic!
+                                    #(.getattr %1 %2 %3) write-attr-out)}
+   op-setattr {:arg-parser parse-setattr-in
+               :processor! (partial process-generic!
+                                    #(.getattr %1 %2 %3) write-attr-out)}
    op-mknod {:arg-parser parse-mknod-in
              :processor! (partial process-generic!
                                   #(.mknod %1 %2 %3) write-entry-out)}

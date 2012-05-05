@@ -37,5 +37,11 @@
           "Unlink a file.")
   (rmdir [this inode filename continuation!]
          "Remove an empty directory.")
+  (chmod [this inode mode continuation!])
+  (setuid [this inode uid continuation!])
+  (setgid [this inode gid continuation!])
+  (truncate [this inode size continuation!])
+  (setatime [this inode seconds nseconds continuation!])
+  (setmtime [this inode seconds nseconds continuation!])
   ;; and so on
   )
