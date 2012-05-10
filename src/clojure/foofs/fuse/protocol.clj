@@ -383,13 +383,6 @@
          :nop)
      ] nil))
 
-(defn process-releasedir!
-  [fuse request]
-  (.releasedir
-    (:filesystem fuse)
-    request
-    (partial reply-error! fuse request)))
-
 (defn process-destroy!
   [fuse request]
   (.destroy (:filesystem fuse) request)
@@ -443,7 +436,8 @@
                :processor! (partial process-generic!
                                     #(.readdir %1 %2 %3) write-bytes)}
    op-releasedir {:arg-parser parse-release-in
-                  :processor! process-releasedir!}
+                  :processor! (partial process-generic!
+                                       #(.releasedir %1 %2 %3) write-skip)}
    op-create {:arg-parser parse-create-in
               :processor! (partial process-generic!
                                    #(.create %1 %2 %3) write-create-out)}

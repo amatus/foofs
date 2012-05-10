@@ -158,8 +158,8 @@
     (.reference
       backend (:nodeid request)
       (fn [link]
-        (if (nil? link)
-          (continuation! errno-noent)
+        (if (integer? link)
+          (continuation! link)
           (continuation! {:handle 0
                           :flags 0})))))
   (readfile [this request continuation!]
@@ -183,12 +183,7 @@
        :namelen 255
        :frsize 0}))
   (release [this request continuation!]
-    (.dereference
-      backend (:nodeid request)
-      (fn [link]
-        (if (nil? link)
-          (continuation! errno-noent)
-          (continuation! 0)))))
+    (.dereference backend (:nodeid request) continuation!))
   (init [this request]
     (.println *err* "init called")
     (send
@@ -199,8 +194,8 @@
     (.reference
       backend (:nodeid request)
       (fn [link]
-        (if (nil? link)
-          (continuation! errno-noent)
+        (if (integer? link)
+          (continuation! link)
           (send
             readdir-agent
             (fn [state]
@@ -247,9 +242,7 @@
     (.dereference
       backend (:nodeid request)
       (fn [link]
-        (if (nil? link)
-          (continuation! errno-noent)
-          (continuation! 0))
+        (continuation! link)
         (send
           readdir-agent
           (fn [state]
@@ -265,9 +258,9 @@
             (continuation! attr)
             (.reference
               backend (:inode attr)
-              (fn [result]
-                (if (nil? result)
-                  (continuation! errno-noent)
+              (fn [link]
+                (if (integer? link)
+                  (continuation! link)
                   (continuation!
                     (assoc (fill-entry attr)
                            :handle 0

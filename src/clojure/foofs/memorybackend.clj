@@ -33,20 +33,29 @@
    :gid 0
    :rdev 0})
 
-(defn link-modifier!
-  [state-agent f inode continuation! state]
-  (let [attr-table (:attr-table state)
-        attr (get attr-table inode)]
-    (if (nil? attr)
-      (do
-        (continuation! nil)
-        state)
-      (let [link (f (:nlink attr))]
-        (send state-agent
-              (fn [state]
-                (continuation! link)
-                state))
-        (assoc-deep state link :attr-table inode :nlink)))))
+(defn attr-modifier!
+  [state-agent inode f continuation!]
+  (send
+    state-agent
+    (fn [state]
+      (let [attr-table (:attr-table state)
+            attr (get attr-table inode)]
+        (if (nil? attr)
+          (do (continuation! errno-noent) state)
+          (let [new-attr (f attr)]
+            (send state-agent
+                  (fn [state]
+                    (continuation! new-attr)
+                    state))
+            (assoc-deep state new-attr :attr-table inode)))))))
+
+;; TODO rename s/attr/attrs/ almost everywhere
+(defn attr-attribute-modifier!
+  [state-agent inode f attribute continuation!]
+  (attr-modifier! state-agent inode
+                  (fn [attr]
+                    (assoc attr attribute (f (get attr attribute))))
+                  continuation!))
 
 (defrecord MemoryBackend
   [^clojure.lang.Agent state-agent]
@@ -66,11 +75,9 @@
         (continuation! nil)
         (continuation! (assoc attr :inode inode)))))
   (reference [this inode continuation!]
-    (send state-agent
-          (partial link-modifier! state-agent inc inode continuation!)))
+    (attr-attribute-modifier! state-agent inode inc :nlink continuation!))
   (dereference [this inode continuation!]
-    (send state-agent
-          (partial link-modifier! state-agent dec inode continuation!)))
+    (attr-attribute-modifier! state-agent inode dec :nlink continuation!))
   (clonedir [this inode continuation!]
     (let [state (deref state-agent)
           lookup-table (:lookup-table state)
@@ -208,4 +215,30 @@
                                            (assoc
                                              attr-table child-inode
                                              (assoc child-attr
-                                                    :nlink nlink)))))))))))))))
+                                                    :nlink nlink))))))))))))))
+  (chmod [this inode mode continuation!]
+    (attr-attribute-modifier! state-agent inode
+                              #(bit-or (bit-and stat-type-mask %)
+                                       (bit-and stat-mode-mask mode))
+                              :mode continuation!))
+  (setuid [this inode uid continuation!]
+    (attr-attribute-modifier! state-agent inode
+                              (fn [_] uid)
+                              :uid continuation!))
+  (setgid [this inode gid continuation!]
+    (attr-attribute-modifier! state-agent inode
+                              (fn [_] gid)
+                              :gid continuation!))
+  (truncate [this inode size continuation!]
+    ;; TODO
+    (continuation! errno-nosys))
+  (setatime [this inode seconds nseconds continuation!]
+    (attr-modifier! state-agent inode
+                    (fn [attr]
+                      (assoc attr :atime seconds :atimensec nseconds))
+                    continuation!))
+  (setmtime [this inode seconds nseconds continuation!]
+    (attr-modifier! state-agent inode
+                    (fn [attr]
+                      (assoc attr :mtime seconds :mtimensec nseconds))
+                    continuation!)))

@@ -207,6 +207,7 @@
 (def stat-type-socket    0140000)
 (def stat-type-whiteout  0160000)
 (def stat-type-mask      0170000)
+(def stat-mode-mask      0007777)
 
 ;; TODO: Figure out how to subclass com.sun.jna.Structure in Clojure or wimp
 ;; out and write it in Java.
