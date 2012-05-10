@@ -32,5 +32,5 @@
 
 (defn chain
   ([] nil)
-  ([fn] (fn))
-  ([fn & fns] (fn (partial chain fns))))
+  ([f] (f))
+  ([f & fs] (f (partial apply chain fs))))

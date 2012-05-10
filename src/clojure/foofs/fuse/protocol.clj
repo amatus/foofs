@@ -21,15 +21,15 @@
 (def fuse-version-major 7)
 (def fuse-version-minor 8)
 (def fuse-root-id 1)
-(def setattr-valid-mode (bit-shift-left 1 0))
-(def setattr-valid-uid (bit-shift-left 1 1))
-(def setattr-valid-gid (bit-shift-left 1 2))
-(def setattr-valid-size (bit-shift-left 1 3))
-(def setattr-valid-atime (bit-shift-left 1 4))
-(def setattr-valid-mtime (bit-shift-left 1 5))
-(def setattr-valid-handle (bit-shift-left 1 6))
-(def setattr-valid-atime-now (bit-shift-left 1 7))
-(def setattr-valid-mtime-now (bit-shift-left 1 8))
+(def setattr-valid-mode 0)
+(def setattr-valid-uid 1)
+(def setattr-valid-gid 2)
+(def setattr-valid-size 3)
+(def setattr-valid-atime 4)
+(def setattr-valid-mtime 5)
+(def setattr-valid-handle 6)
+(def setattr-valid-atime-now 7)
+(def setattr-valid-mtime-now 8)
 
 (def op-lookup       1)
 (def op-forget       2)
@@ -240,6 +240,10 @@
      :mode mode
      :filename filename}))
 
+(defn write-skip
+  [_]
+  write-nothing)
+
 (defn write-fuse-attr
   [attr]
   (domonad
@@ -402,7 +406,7 @@
                                     #(.getattr %1 %2 %3) write-attr-out)}
    op-setattr {:arg-parser parse-setattr-in
                :processor! (partial process-generic!
-                                    #(.getattr %1 %2 %3) write-attr-out)}
+                                    #(.setattr %1 %2 %3) write-attr-out)}
    op-mknod {:arg-parser parse-mknod-in
              :processor! (partial process-generic!
                                   #(.mknod %1 %2 %3) write-entry-out)}
@@ -411,10 +415,10 @@
                                   #(.mkdir %1 %2 %3) write-entry-out)}
    op-unlink {:arg-parser parse-utf8
               :processor! (partial process-generic!
-                                   #(.unlink %1 %2 %3) write-nothing)}
+                                   #(.unlink %1 %2 %3) write-skip)}
    op-rmdir {:arg-parser parse-utf8
              :processor! (partial process-generic!
-                                  #(.rmdir %1 %2 %3) write-nothing)}
+                                  #(.rmdir %1 %2 %3) write-skip)}
    op-link {:arg-parser parse-link-in
             :processor! (partial process-generic!
                                  #(.link %1 %2 %3) write-entry-out)}
@@ -429,7 +433,7 @@
                                    #(.statfs %1 %2 %3) write-statfs-out)}
    op-release {:arg-parser parse-release-in
                :processor! (partial process-generic!
-                                    #(.release %1 %2 %3) write-nothing)}
+                                    #(.release %1 %2 %3) write-skip)}
    op-init {:arg-parser parse-init-in
             :processor! process-init!}
    op-opendir {:arg-parser parse-open-in
