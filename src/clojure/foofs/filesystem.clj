@@ -204,14 +204,13 @@
                     handle (next-key opendirs next-handle Long/MIN_VALUE
                                      Long/MAX_VALUE)]
                 (if (nil? handle)
-                  (do
-                    (continuation! errno-nomem)
-                    state)
+                  (do (continuation! errno-nomem) state)
                   (do
                     (agent-do readdir-agent
                               (continuation! {:handle handle :flags 0}))
-                    {:opendirs (assoc opendirs handle [])
-                     :next-handle (inc handle)})))))))))
+                    (assoc state
+                           :opendirs (assoc opendirs handle nil)
+                           :next-handle (inc handle)))))))))))
   (readdir [this request continuation!]
     (let [arg (:arg request)
           handle (:handle arg)
@@ -227,8 +226,7 @@
                 (fn [state]
                   (agent-do readdir-agent
                             (continuation! (take size encoded-dirents)))
-                  {:opendirs (assoc (:opendirs state) handle encoded-dirents)
-                   :next-handle (:next-handle state)})))))
+                  (assoc-deep state encoded-dirents :opendirs handle))))))
         (let [dirents ((:opendirs (deref readdir-agent)) handle)]
           (continuation! (take size (drop offset dirents)))))))
   (releasedir [this request continuation!]
@@ -239,8 +237,9 @@
         (send
           readdir-agent
           (fn [state]
-            {:opendirs (dissoc (:opendirs state) (:handle (:arg request)))
-             :next-handle (:next-handle state)})))))
+            (let [opendirs (:opendirs state)]
+              (assoc state :opendirs
+                     (dissoc opendirs (:handle (:arg request))))))))))
   (create [this request continuation!]
     ;; is create supposed to be atomic?
     (let [arg (:arg request)]
