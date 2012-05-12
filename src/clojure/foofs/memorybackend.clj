@@ -221,8 +221,24 @@
                               (fn [_] gid)
                               :gid continuation!))
   (truncate [this inode size continuation!]
-    ;; TODO
-    (continuation! errno-nosys))
+    (send
+      state-agent
+      (fn [state]
+        (let [attr-table (:attr-table state)
+              file-table (:file-table state)
+              attr (get attr-table inode)
+              file (get file-table inode)]
+          (if (nil? attr)
+            (do (continuation! errno-noent) state)
+            (do
+              (agent-do state-agent (continuation! nil))
+              (assoc
+                state
+                :attr-table (assoc-deep attr-table size inode :size)
+                :file-table (assoc
+                              file-table inode
+                              (take size
+                                    (concat file (repeat (byte 0))))))))))))
   (setatime [this inode seconds nseconds continuation!]
     (attr-modifier! state-agent inode
                     (fn [attr]
