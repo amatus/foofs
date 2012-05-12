@@ -34,3 +34,7 @@
   ([] nil)
   ([f] (f))
   ([f & fs] (f (partial apply chain fs))))
+
+(defmacro agent-do
+  [_agent f]
+  `(send ~_agent #(do ~f %)))

@@ -208,12 +208,8 @@
                     (continuation! errno-nomem)
                     state)
                   (do
-                    (send
-                      readdir-agent
-                      (fn [state]
-                        (continuation! {:handle handle
-                                        :flags 0})
-                        state))
+                    (agent-do readdir-agent
+                              (continuation! {:handle handle :flags 0}))
                     {:opendirs (assoc opendirs handle [])
                      :next-handle (inc handle)})))))))))
   (readdir [this request continuation!]
@@ -229,11 +225,8 @@
               (send
                 readdir-agent
                 (fn [state]
-                  (send
-                    readdir-agent
-                    (fn [state]
-                      (continuation! (take size encoded-dirents))
-                      state))
+                  (agent-do readdir-agent
+                            (continuation! (take size encoded-dirents)))
                   {:opendirs (assoc (:opendirs state) handle encoded-dirents)
                    :next-handle (:next-handle state)})))))
         (let [dirents ((:opendirs (deref readdir-agent)) handle)]

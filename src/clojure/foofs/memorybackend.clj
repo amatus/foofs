@@ -43,10 +43,7 @@
         (if (nil? attr)
           (do (continuation! errno-noent) state)
           (let [new-attr (f attr)]
-            (send state-agent
-                  (fn [state]
-                    (continuation! new-attr)
-                    state))
+            (agent-do state-agent (continuation! new-attr))
             (assoc-deep state new-attr :attr-table inode)))))))
 
 ;; TODO rename s/attr/attrs/ almost everywhere
@@ -114,11 +111,8 @@
                   attr (conj new-attr
                              {:mode mode
                               :nlink 1})]
-              (send
-                state-agent
-                (fn [state]
-                  (continuation! (assoc attr :inode child-inode))
-                  state))
+              (agent-do state-agent
+                        (continuation! (assoc attr :inode child-inode)))
               (assoc state
                      :attr-table (assoc attr-table child-inode attr)
                      :lookup-table (assoc lookup-table inode
@@ -141,11 +135,8 @@
               (if (nil? attr)
                 (do (continuation! errno-noent) state)
                 (do
-                  (send
-                    state-agent
-                    (fn [state]
-                      (continuation! (assoc attr :inode target-inode))
-                      state))
+                  (agent-do state-agent
+                            (continuation! (assoc attr :inode target-inode)))
                   (assoc state
                          :attr-table (assoc attr-table target-inode
                                             (assoc attr :nlink
@@ -204,7 +195,7 @@
                   (if (not (empty? (dissoc child-children "." "..")))
                     (do (continuation! errno-notempty) state)
                     (let [nlink (- (:nlink child-attr) 3)]
-                      (continuation! 0)
+                      (agent-do state-agent (continuation! 0))
                       (assoc state
                              :lookup-table (dissoc
                                              (assoc lookup-table inode
