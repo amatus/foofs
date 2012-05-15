@@ -51,7 +51,22 @@
       [(.and (biginteger 0xffffffffffffffff) (biginteger (.getLong buffer2)))
        buffer2])))
 
-(defn skip
+(defn parse-bytes
+  [x]
+  (fn byte-parser
+    [buffer]
+    (when (<= x (.remaining buffer))
+      (let [buffer-tail (.duplicate buffer)
+            buffer-head (.duplicate buffer)
+            order (.order buffer)
+            position (+ x (.position buffer))]
+        (.order buffer-tail order)
+        (.order buffer-head order)
+        (.position buffer-tail position)
+        (.limit buffer-head position)
+        [buffer-head buffer-tail]))))
+
+(defn skip-bytes
   [x]
   (fn parse-skip
     [buffer]
@@ -60,10 +75,10 @@
       [nil (.position buffer2 (+ x (.position buffer)))])))
 
 (def skip-32
-  (skip 4))
+  (skip-bytes 4))
 
 (def skip-64
-  (skip 8))
+  (skip-bytes 8))
 
 (def parse-nothing (with-monad parser-m (m-result nil)))
 

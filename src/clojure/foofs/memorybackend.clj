@@ -15,7 +15,7 @@
 
 (ns foofs.memorybackend
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
-        foofs.fuse.jna
+        [foofs.fuse bytebuffer jna]
         foofs.util))
 
 (def new-attr
@@ -95,6 +95,30 @@
       (if (nil? file)
         (continuation! nil)
         (continuation! (take size (drop offset file))))))
+  (writefile [this inode offset size data continuation!]
+    (send
+      state-agent
+      (fn [state]
+        (let [attr-table (:attr-table state)
+              file-table (:file-table state)
+              attr (get attr-table inode)
+              file (get file-table inode)]
+          (if (nil? attr)
+            (do (continuation! errno-noent) state)
+            (let [tail-offset (+ offset size)
+                  tail-size (- (max tail-offset (:size attr)) tail-offset)
+                  file-extended (concat file (repeat (byte 0)))
+                  file-written (concat
+                                 (take offset file-extended)
+                                 (buffer-seq! data)
+                                 (take tail-size
+                                       (drop tail-offset file-extended)))
+                  new-size (count file-written)]
+              (agent-do state-agent
+                        (continuation! {:size (.limit data)}))
+              (assoc state
+                     :attr-table (assoc-deep attr-table new-size inode :size)
+                     :file-table (assoc file-table inode file-written))))))))
   (mknod [this inode filename mode continuation!]
     (send
       state-agent

@@ -28,6 +28,7 @@
   (link [this request continuation!] "Create hardlink.")
   (open [this request continuation!] "Open file.")
   (readfile [this request continuation!] "Read file.")
+  (writefile [this request continuation!] "Write file.")
   (statfs [this request continuation!] "Get file system statistics.")
   (release [this request continuation!] "Release file.")
   (init [this request] "Initialize filesystem.")

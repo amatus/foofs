@@ -29,6 +29,8 @@
             "Return a lazy sequence of directory entries.")
   (readfile [this inode offset size continuation!]
             "Return a ByteBuffer or sequence of bytes.")
+  (writefile [this inode offset size data continuation!]
+             "Writes a ByteBuffer to a file.")
   (mknod [this inode filename mode continuation!]
          "Create an inode and return its attributes.")
   (link [this inode filename target-inode continuation!]

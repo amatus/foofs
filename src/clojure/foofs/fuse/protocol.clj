@@ -208,6 +208,20 @@
      :size size
      :read-flags read-flags}))
 
+(def parse-write-in
+  (domonad
+    parser-m
+    [handle parse-opaque64
+     offset parse-uint64
+     size parse-uint32
+     write-flags parse-opaque32
+     data (parse-bytes size)]
+    {:handle handle
+     :offset offset
+     :size size
+     :write-flags write-flags
+     :data data}))
+
 (def parse-release-in
   (domonad
     parser-m
@@ -294,6 +308,13 @@
     [_ (write-int64 (:handle open-out))
      _ (write-int32 (:flags open-out))
      _ (pad 4)]
+    nil))
+
+(defn write-write-out
+  [write-out]
+  (domonad
+    state-m
+    [_ (write-int32 (:size write-out))]
     nil))
 
 (defn write-statfs-out
@@ -421,6 +442,9 @@
    op-read {:arg-parser parse-read-in
             :processor! (partial process-generic!
                                  #(.readfile %1 %2 %3) write-bytes)}
+   op-write {:arg-parser parse-write-in
+             :processor! (partial process-generic!
+                                  #(.writefile %1 %2 %3) write-write-out)}
    op-statfs {:arg-parser parse-nothing
               :processor! (partial process-generic!
                                    #(.statfs %1 %2 %3) write-statfs-out)}

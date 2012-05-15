@@ -172,6 +172,9 @@
           (if (nil? buffer)
             (continuation! errno-noent)
             (continuation! buffer))))))
+  (writefile [this {:keys [nodeid arg]} continuation!]
+    (.writefile
+      backend nodeid (:offset arg) (:size arg) (:data arg) continuation!))
   (statfs [this request continuation!]
     (continuation!
       {:blocks 0
