@@ -218,6 +218,7 @@
                   (do (continuation! errno-notdir) state)
                   (if (not (empty? (dissoc child-children "." "..")))
                     (do (continuation! errno-notempty) state)
+                    ;; TODO: 3 is wrong if . or .. don't exist
                     (let [nlink (- (:nlink child-attr) 3)]
                       (agent-do state-agent (continuation! 0))
                       (assoc state
@@ -272,4 +273,6 @@
     (attr-modifier! state-agent inode
                     (fn [attr]
                       (assoc attr :mtime seconds :mtimensec nseconds))
-                    continuation!)))
+                    continuation!))
+  (rename [this inode target-inode filename target-filename continuation!]
+    (continuation! errno-nosys)))

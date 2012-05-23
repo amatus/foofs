@@ -45,5 +45,6 @@
   (truncate [this inode size continuation!])
   (setatime [this inode seconds nseconds continuation!])
   (setmtime [this inode seconds nseconds continuation!])
+  (rename [this inode target-inode filename target-filename continuation!])
   ;; and so on
   )

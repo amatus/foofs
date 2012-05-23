@@ -182,6 +182,16 @@
     {:mode mode
      :filename filename}))
 
+(def parse-rename-in
+  (domonad
+    parser-m
+    [target-inode parse-opaque64
+     filename parse-utf8
+     target-filename parse-utf8]
+    {:target-inode target-inode
+     :filename filename
+     :target-filename target-filename}))
+
 (def parse-link-in
   (domonad
     parser-m
@@ -433,6 +443,9 @@
    op-rmdir {:arg-parser parse-utf8
              :processor! (partial process-generic!
                                   #(.rmdir %1 %2 %3) write-skip)}
+   op-rename {:arg-parser parse-rename-in
+              :processor! (partial process-generic!
+                                   #(.rename %1 %2 %3) write-skip)}
    op-link {:arg-parser parse-link-in
             :processor! (partial process-generic!
                                  #(.link %1 %2 %3) write-entry-out)}

@@ -25,6 +25,7 @@
   (mkdir [this request continuation!] "Create directory.")
   (unlink [this request continuation!] "Unlink a file.")
   (rmdir [this request continuation!] "Remove an empty directory.")
+  (rename [this request continuation!] "Rename.")
   (link [this request continuation!] "Create hardlink.")
   (open [this request continuation!] "Open file.")
   (readfile [this request continuation!] "Read file.")

@@ -30,6 +30,12 @@
    :attr attr})
 
 ;; TODO - make use of argument destructuring
+;; TODO - the backend operations will eventually be interleaved with operations
+;; from other clients. These need to be transformed to not operate on inode
+;; numbers, because those will not be the same between clients. It seems like
+;; a bad idea to call backend operations conditionally on the results of other
+;; backend operations since they may return different results on different
+;; clients.
 (defrecord FooFilesystem
   [^foofs.filesystembackend.FilesystemBackend backend
    ^clojure.lang.Agent readdir-agent]
@@ -131,6 +137,8 @@
             (continuation! (fill-entry attr)))))))
   (mkdir [this request continuation!]
     (let [arg (:arg request)]
+      ;; TODO: this probably should be a backend op. the parent dir could go
+      ;; away before we can ref it with the .. link.
       (.mknod
         backend (:nodeid request) (:filename arg)
         (bit-or stat-type-directory (:mode arg))
@@ -146,6 +154,9 @@
     (.unlink backend (:nodeid request) (:arg request) continuation!))
   (rmdir [this request continuation!]
     (.rmdir backend (:nodeid request) (:arg request) continuation!))
+  (rename [this {:keys [nodeid arg]} continuation!]
+    (.rename backend nodeid (:target-inode arg) (:filename arg)
+             (:target-filename arg) continuation!))
   (link [this request continuation!]
     (let [arg (:arg request)]
       (.link
