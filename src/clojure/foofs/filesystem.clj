@@ -29,7 +29,8 @@
    :attr-valid-nsec 0
    :attr attr})
 
-;; TODO - make use of argument destructuring
+;; TODO - rename attr(s) to inode, because that's the name of that structure.
+;;        rename inode (referring to inode number) to nodeid.
 ;; TODO - the backend operations will eventually be interleaved with operations
 ;; from other clients. These need to be transformed to not operate on inode
 ;; numbers, because those will not be the same between clients. It seems like
@@ -40,9 +41,9 @@
   [^foofs.filesystembackend.FilesystemBackend backend
    ^clojure.lang.Agent readdir-agent]
   Filesystem
-  (lookup [this request continuation!]
+  (lookup [_ {:keys [nodeid arg]} continuation!]
     (.lookup
-      backend (:nodeid request) (:arg request)
+      backend nodeid arg
       (fn [inode]
         (if (nil? inode)
           (continuation! errno-noent)
@@ -52,19 +53,17 @@
               (if (nil? attr)
                 (continuation! errno-noent)
                 (continuation! (fill-entry attr)))))))))
-  (forget [this request]
+  (forget [_ _]
     nil)
-  (getattr [this request continuation!]
+  (getattr [_ {:keys [nodeid]} continuation!]
     (.getattr
-      backend (:nodeid request)
+      backend nodeid
       (fn [attr]
         (if (nil? attr)
           (continuation! errno-noent)
           (continuation! (assoc attr :valid 0 :valid-nsec 0))))))
-  (setattr [this request continuation!]
-    (let [nodeid (:nodeid request)
-          arg (:arg request)
-          valid (:valid arg)
+  (setattr [this {:keys [nodeid arg] :as request} continuation!]
+    (let [valid (:valid arg)
           set-mode! (fn [next!]
                      (if (bit-test valid setattr-valid-mode)
                        (.chmod
@@ -127,66 +126,62 @@
         set-atime!
         set-mtime!
         #(.getattr this request continuation!))))
-  (mknod [this request continuation!]
-    (let [arg (:arg request)]
-      (.mknod
-        backend (:nodeid request) (:filename arg) (:mode arg)
-        (fn [attr]
-          (if (integer? attr)
-            (continuation! attr)
+  (mknod [_ {:keys [nodeid arg]} continuation!]
+    (.mknod
+      backend nodeid (:filename arg) (:mode arg)
+      (fn [attr]
+        (if (integer? attr)
+          (continuation! attr)
+          (continuation! (fill-entry attr))))))
+  (mkdir [_ {:keys [nodeid arg]} continuation!]
+    ;; TODO: this probably should be a backend op. the parent dir could go
+    ;; away before we can ref it with the .. link.
+    (.mknod
+      backend nodeid (:filename arg)
+      (bit-or stat-type-directory (:mode arg))
+      (fn [attr]
+        (if (integer? attr)
+          (continuation! attr)
+          (let [inode (:inode attr)]
+            ;; do we need to wait for these to finish?
+            (.link backend inode "." inode skip)
+            (.link backend inode ".." nodeid skip)
             (continuation! (fill-entry attr)))))))
-  (mkdir [this request continuation!]
-    (let [arg (:arg request)]
-      ;; TODO: this probably should be a backend op. the parent dir could go
-      ;; away before we can ref it with the .. link.
-      (.mknod
-        backend (:nodeid request) (:filename arg)
-        (bit-or stat-type-directory (:mode arg))
-        (fn [attr]
-          (if (integer? attr)
-            (continuation! attr)
-            (let [inode (:inode attr)]
-              ;; do we need to wait for these to finish?
-              (.link backend inode "." inode skip)
-              (.link backend inode ".." (:nodeid request) skip)
-              (continuation! (fill-entry attr))))))))
-  (unlink [this request continuation!]
-    (.unlink backend (:nodeid request) (:arg request) continuation!))
-  (rmdir [this request continuation!]
-    (.rmdir backend (:nodeid request) (:arg request) continuation!))
-  (rename [this {:keys [nodeid arg]} continuation!]
+  (unlink [_ {:keys [nodeid arg]} continuation!]
+    (.unlink backend nodeid arg continuation!))
+  (rmdir [_ {:keys [nodeid arg]} continuation!]
+    (.rmdir backend nodeid arg continuation!))
+  (rename [_ {:keys [nodeid arg]} continuation!]
     (.rename backend nodeid (:target-inode arg) (:filename arg)
              (:target-filename arg) continuation!))
-  (link [this request continuation!]
-    (let [arg (:arg request)]
-      (.link
-        backend (:nodeid request) (:filename arg) (:target-inode arg)
-        (fn [attr]
-          (if (integer? attr)
-            (continuation! attr)
-            (continuation! (fill-entry attr)))))))
-  (open [this request continuation!]
+  (link [_ {:keys [nodeid arg]} continuation!]
+    (.link
+      backend nodeid (:filename arg) (:target-inode arg)
+      (fn [attr]
+        (if (integer? attr)
+          (continuation! attr)
+          (continuation! (fill-entry attr))))))
+  (open [_ {:keys [nodeid]} continuation!]
     (.reference
-      backend (:nodeid request)
+      backend nodeid
       (fn [link]
         (if (integer? link)
           (continuation! link)
           (continuation! {:handle 0
                           :flags 0})))))
-  (readfile [this request continuation!]
-    (let [arg (:arg request)
-          offset (:offset arg)
+  (readfile [_ {:keys [nodeid arg]} continuation!]
+    (let [offset (:offset arg)
           size (:size arg)]
       (.readfile
-        backend (:nodeid request) offset size
+        backend nodeid offset size
         (fn [buffer]
           (if (nil? buffer)
             (continuation! errno-noent)
             (continuation! buffer))))))
-  (writefile [this {:keys [nodeid arg]} continuation!]
+  (writefile [_ {:keys [nodeid arg]} continuation!]
     (.writefile
       backend nodeid (:offset arg) (:size arg) (:data arg) continuation!))
-  (statfs [this request continuation!]
+  (statfs [_ _ continuation!]
     (continuation!
       {:blocks 0
        :bfree 0
@@ -196,17 +191,17 @@
        :bsize 512
        :namelen 255
        :frsize 0}))
-  (release [this request continuation!]
-    (.dereference backend (:nodeid request) continuation!))
-  (init [this request]
+  (release [_ {:keys [nodeid]} continuation!]
+    (.dereference backend nodeid continuation!))
+  (init [_ _]
     (.println *err* "init called")
     (send
       readdir-agent
       (partial conj {:opendirs {}
                      :next-handle 0})))
-  (opendir [this request continuation!]
+  (opendir [_ {:keys [nodeid]} continuation!]
     (.reference
-      backend (:nodeid request)
+      backend nodeid
       (fn [link]
         (if (integer? link)
           (continuation! link)
@@ -225,14 +220,13 @@
                     (assoc state
                            :opendirs (assoc opendirs handle nil)
                            :next-handle (inc handle)))))))))))
-  (readdir [this request continuation!]
-    (let [arg (:arg request)
-          handle (:handle arg)
+  (readdir [_ {:keys [nodeid arg]} continuation!]
+    (let [handle (:handle arg)
           offset (:offset arg)
           size (:size arg)]
       (if (zero? offset) ;; if we're reading from zero refresh the dirents
         (.clonedir
-          backend (:nodeid request)
+          backend nodeid
           (fn [dirents]
             (let [encoded-dirents (encode-dirents dirents)]
               (send
@@ -243,9 +237,9 @@
                   (assoc-deep state encoded-dirents :opendirs handle))))))
         (let [dirents ((:opendirs (deref readdir-agent)) handle)]
           (continuation! (take size (drop offset dirents)))))))
-  (releasedir [this request continuation!]
+  (releasedir [_ {:keys [nodeid arg]} continuation!]
     (.dereference
-      backend (:nodeid request)
+      backend nodeid
       (fn [link]
         (continuation! link)
         (send
@@ -253,23 +247,22 @@
           (fn [state]
             (let [opendirs (:opendirs state)]
               (assoc state :opendirs
-                     (dissoc opendirs (:handle (:arg request))))))))))
-  (create [this request continuation!]
+                     (dissoc opendirs (:handle arg)))))))))
+  (create [_ {:keys [nodeid arg]} continuation!]
     ;; is create supposed to be atomic?
-    (let [arg (:arg request)]
-      (.mknod
-        backend (:nodeid request) (:filename arg) (:mode arg)
-        (fn [attr]
-          (if (integer? attr)
-            (continuation! attr)
-            (.reference
-              backend (:inode attr)
-              (fn [link]
-                (if (integer? link)
-                  (continuation! link)
-                  (continuation!
-                    (assoc (fill-entry attr)
-                           :handle 0
-                           :flags 0))))))))))
-  (destroy [this request]
+    (.mknod
+      backend nodeid (:filename arg) (:mode arg)
+      (fn [attr]
+        (if (integer? attr)
+          (continuation! attr)
+          (.reference
+            backend (:inode attr)
+            (fn [link]
+              (if (integer? link)
+                (continuation! link)
+                (continuation!
+                  (assoc (fill-entry attr)
+                         :handle 0
+                         :flags 0)))))))))
+  (destroy [_ _]
     nil))

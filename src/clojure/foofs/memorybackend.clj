@@ -56,7 +56,7 @@
 (defrecord MemoryBackend
   [^clojure.lang.Agent state-agent]
   FilesystemBackend
-  (lookup [this inode child continuation!]
+  (lookup [_ inode child continuation!]
     (let [state (deref state-agent)
           lookup-table (:lookup-table state)
           children (get lookup-table inode)
@@ -64,17 +64,17 @@
                   inode
                   (get children child))]
       (continuation! child)))
-  (getattr [this inode continuation!]
+  (getattr [_ inode continuation!]
     (let [attrs-table (:attrs-table (deref state-agent))
           attrs (get attrs-table inode)]
       (if (nil? attrs)
         (continuation! nil)
         (continuation! (assoc attrs :inode inode)))))
-  (reference [this inode continuation!]
+  (reference [_ inode continuation!]
     (attribute-modifier! state-agent inode inc :nlink continuation!))
-  (dereference [this inode continuation!]
+  (dereference [_ inode continuation!]
     (attribute-modifier! state-agent inode dec :nlink continuation!))
-  (clonedir [this inode continuation!]
+  (clonedir [_ inode continuation!]
     (let [state (deref state-agent)
           lookup-table (:lookup-table state)
           children (get lookup-table inode)
@@ -88,13 +88,13 @@
                :nodeid inode
                :type (:mode attrs)}))
           children))))
-  (readfile [this inode offset size continuation!]
+  (readfile [_ inode offset size continuation!]
     (let [state (deref state-agent)
           file (get (:file-table state) inode)]
       (if (nil? file)
         (continuation! nil)
         (continuation! (take size (drop offset file))))))
-  (writefile [this inode offset size data continuation!]
+  (writefile [_ inode offset size data continuation!]
     (send
       state-agent
       (fn [state]
@@ -118,7 +118,7 @@
               (assoc state
                      :attrs-table (assoc-deep attrs-table new-size inode :size)
                      :file-table (assoc file-table inode file-written))))))))
-  (mknod [this inode filename mode continuation!]
+  (mknod [_ inode filename mode continuation!]
     (send
       state-agent
       (fn [state]
@@ -141,7 +141,7 @@
                      :lookup-table (assoc lookup-table inode
                                           (assoc children filename child-inode))
                      :next-inode (inc child-inode))))))))
-  (link [this inode filename target-inode continuation!]
+  (link [_ inode filename target-inode continuation!]
     (send
       state-agent
       (fn [state]
@@ -167,7 +167,7 @@
                          :lookup-table (assoc lookup-table inode
                                               (assoc children filename
                                                      target-inode)))))))))))
-  (unlink [this inode filename continuation!]
+  (unlink [_ inode filename continuation!]
     (send
       state-agent
       (fn [state]
@@ -196,7 +196,7 @@
                                             attrs-table child-inode
                                             (assoc child-attrs
                                                    :nlink nlink)))))))))))))
-  (rmdir [this inode filename continuation!]
+  (rmdir [_ inode filename continuation!]
     (send
       state-agent
       (fn [state]
@@ -231,20 +231,20 @@
                                               attrs-table child-inode
                                               (assoc child-attrs
                                                      :nlink nlink))))))))))))))
-  (chmod [this inode mode continuation!]
+  (chmod [_ inode mode continuation!]
     (attribute-modifier! state-agent inode
                          #(bit-or (bit-and stat-type-mask %)
                                   (bit-and stat-mode-mask mode))
                          :mode continuation!))
-  (setuid [this inode uid continuation!]
+  (setuid [_ inode uid continuation!]
     (attribute-modifier! state-agent inode
                          (fn [_] uid)
                          :uid continuation!))
-  (setgid [this inode gid continuation!]
+  (setgid [_ inode gid continuation!]
     (attribute-modifier! state-agent inode
                          (fn [_] gid)
                          :gid continuation!))
-  (truncate [this inode size continuation!]
+  (truncate [_ inode size continuation!]
     (send
       state-agent
       (fn [state]
@@ -263,15 +263,15 @@
                               file-table inode
                               (take size
                                     (concat file (repeat (byte 0))))))))))))
-  (setatime [this inode seconds nseconds continuation!]
+  (setatime [_ inode seconds nseconds continuation!]
     (attrs-modifier! state-agent inode
                      (fn [attrs]
                        (assoc attrs :atime seconds :atimensec nseconds))
                      continuation!))
-  (setmtime [this inode seconds nseconds continuation!]
+  (setmtime [_ inode seconds nseconds continuation!]
     (attrs-modifier! state-agent inode
                      (fn [attrs]
                        (assoc attrs :mtime seconds :mtimensec nseconds))
                      continuation!))
-  (rename [this inode target-inode filename target-filename continuation!]
+  (rename [_ inode target-inode filename target-filename continuation!]
     (continuation! errno-nosys)))
