@@ -19,9 +19,9 @@
   "A FUSE filesystem."
   (lookup [this request continuation!] "Lookup inode.")
   (forget [this request] "I forget.")
-  (getattr [this request continuation!] "Get file attributes.")
-  (setattr [this request continuation!] "Set file attributes.")
-  (mknod [this request continuation!] "Create node.")
+  (getattr [this request continuation!] "Get inode attributes.")
+  (setattr [this request continuation!] "Set inode attributes.")
+  (mknod [this request continuation!] "Create inode.")
   (mkdir [this request continuation!] "Create directory.")
   (unlink [this request continuation!] "Unlink a file.")
   (rmdir [this request continuation!] "Remove an empty directory.")

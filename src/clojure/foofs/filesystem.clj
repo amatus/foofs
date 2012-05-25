@@ -20,16 +20,15 @@
         (foofs.fuse jna protocol)))
 
 (defn fill-entry
-  [attr]
-  {:nodeid (:nodeid attr)
+  [inode]
+  {:nodeid (:nodeid inode)
    :generation 0
    :entry-valid 0
    :attr-valid 0
    :entry-valid-nsec 0
    :attr-valid-nsec 0
-   :attr attr})
+   :attr inode})
 
-;; TODO - rename attr(s) to inode, because that's the name of that structure.
 ;; TODO - the backend operations will eventually be interleaved with operations
 ;; from other clients. These need to be transformed to not operate on inode
 ;; numbers, because those will not be the same between clients. It seems like
@@ -48,19 +47,19 @@
           (continuation! errno-noent)
           (.getattr
             backend child-nodeid
-            (fn [attr]
-              (if (nil? attr)
+            (fn [inode]
+              (if (nil? inode)
                 (continuation! errno-noent)
-                (continuation! (fill-entry attr)))))))))
+                (continuation! (fill-entry inode)))))))))
   (forget [_ _]
     nil)
   (getattr [_ {:keys [nodeid]} continuation!]
     (.getattr
       backend nodeid
-      (fn [attr]
-        (if (nil? attr)
+      (fn [inode]
+        (if (nil? inode)
           (continuation! errno-noent)
-          (continuation! (assoc attr :valid 0 :valid-nsec 0))))))
+          (continuation! (assoc inode :valid 0 :valid-nsec 0))))))
   (setattr [this {:keys [nodeid arg] :as request} continuation!]
     (let [valid (:valid arg)
           set-mode! (fn [next!]
@@ -128,24 +127,24 @@
   (mknod [_ {:keys [nodeid arg]} continuation!]
     (.mknod
       backend nodeid (:filename arg) (:mode arg)
-      (fn [attr]
-        (if (integer? attr)
-          (continuation! attr)
-          (continuation! (fill-entry attr))))))
+      (fn [inode]
+        (if (integer? inode)
+          (continuation! inode)
+          (continuation! (fill-entry inode))))))
   (mkdir [_ {:keys [nodeid arg]} continuation!]
     ;; TODO: this probably should be a backend op. the parent dir could go
     ;; away before we can ref it with the .. link.
     (.mknod
       backend nodeid (:filename arg)
       (bit-or stat-type-directory (:mode arg))
-      (fn [attr]
-        (if (integer? attr)
-          (continuation! attr)
-          (let [child-nodeid (:nodeid attr)]
+      (fn [inode]
+        (if (integer? inode)
+          (continuation! inode)
+          (let [child-nodeid (:nodeid inode)]
             ;; do we need to wait for these to finish?
             (.link backend child-nodeid "." child-nodeid skip)
             (.link backend child-nodeid ".." nodeid skip)
-            (continuation! (fill-entry attr)))))))
+            (continuation! (fill-entry inode)))))))
   (unlink [_ {:keys [nodeid arg]} continuation!]
     (.unlink backend nodeid arg continuation!))
   (rmdir [_ {:keys [nodeid arg]} continuation!]
@@ -156,10 +155,10 @@
   (link [_ {:keys [nodeid arg]} continuation!]
     (.link
       backend nodeid (:filename arg) (:target-nodeid arg)
-      (fn [attr]
-        (if (integer? attr)
-          (continuation! attr)
-          (continuation! (fill-entry attr))))))
+      (fn [inode]
+        (if (integer? inode)
+          (continuation! inode)
+          (continuation! (fill-entry inode))))))
   (open [_ {:keys [nodeid]} continuation!]
     (.reference
       backend nodeid
@@ -251,16 +250,16 @@
     ;; is create supposed to be atomic?
     (.mknod
       backend nodeid (:filename arg) (:mode arg)
-      (fn [attr]
-        (if (integer? attr)
-          (continuation! attr)
+      (fn [inode]
+        (if (integer? inode)
+          (continuation! inode)
           (.reference
-            backend (:nodeid attr)
+            backend (:nodeid inode)
             (fn [link]
               (if (integer? link)
                 (continuation! link)
                 (continuation!
-                  (assoc (fill-entry attr)
+                  (assoc (fill-entry inode)
                          :handle 0
                          :flags 0)))))))))
   (destroy [_ _]
