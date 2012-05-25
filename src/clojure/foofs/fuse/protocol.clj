@@ -185,19 +185,19 @@
 (def parse-rename-in
   (domonad
     parser-m
-    [target-inode parse-opaque64
+    [target-nodeid parse-opaque64
      filename parse-utf8
      target-filename parse-utf8]
-    {:target-inode target-inode
+    {:target-nodeid target-nodeid
      :filename filename
      :target-filename target-filename}))
 
 (def parse-link-in
   (domonad
     parser-m
-    [target-inode parse-opaque64
+    [target-nodeid parse-opaque64
      filename parse-utf8]
-    {:target-inode target-inode
+    {:target-nodeid target-nodeid
      :filename filename}))
 
 (def parse-open-in
@@ -272,7 +272,7 @@
   [attr]
   (domonad
     state-m
-    [_ (write-int64 (:inode attr))
+    [_ (write-int64 (:nodeid attr))
      _ (write-int64 (:size attr))
      _ (write-int64 (:blocks attr))
      _ (write-int64 (:atime attr))

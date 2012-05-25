@@ -21,7 +21,7 @@
 
 (defn fill-entry
   [attr]
-  {:nodeid (:inode attr)
+  {:nodeid (:nodeid attr)
    :generation 0
    :entry-valid 0
    :attr-valid 0
@@ -30,7 +30,6 @@
    :attr attr})
 
 ;; TODO - rename attr(s) to inode, because that's the name of that structure.
-;;        rename inode (referring to inode number) to nodeid.
 ;; TODO - the backend operations will eventually be interleaved with operations
 ;; from other clients. These need to be transformed to not operate on inode
 ;; numbers, because those will not be the same between clients. It seems like
@@ -44,11 +43,11 @@
   (lookup [_ {:keys [nodeid arg]} continuation!]
     (.lookup
       backend nodeid arg
-      (fn [inode]
-        (if (nil? inode)
+      (fn [child-nodeid]
+        (if (nil? child-nodeid)
           (continuation! errno-noent)
           (.getattr
-            backend inode
+            backend child-nodeid
             (fn [attr]
               (if (nil? attr)
                 (continuation! errno-noent)
@@ -142,21 +141,21 @@
       (fn [attr]
         (if (integer? attr)
           (continuation! attr)
-          (let [inode (:inode attr)]
+          (let [child-nodeid (:nodeid attr)]
             ;; do we need to wait for these to finish?
-            (.link backend inode "." inode skip)
-            (.link backend inode ".." nodeid skip)
+            (.link backend child-nodeid "." child-nodeid skip)
+            (.link backend child-nodeid ".." nodeid skip)
             (continuation! (fill-entry attr)))))))
   (unlink [_ {:keys [nodeid arg]} continuation!]
     (.unlink backend nodeid arg continuation!))
   (rmdir [_ {:keys [nodeid arg]} continuation!]
     (.rmdir backend nodeid arg continuation!))
   (rename [_ {:keys [nodeid arg]} continuation!]
-    (.rename backend nodeid (:target-inode arg) (:filename arg)
+    (.rename backend nodeid (:target-nodeid arg) (:filename arg)
              (:target-filename arg) continuation!))
   (link [_ {:keys [nodeid arg]} continuation!]
     (.link
-      backend nodeid (:filename arg) (:target-inode arg)
+      backend nodeid (:filename arg) (:target-nodeid arg)
       (fn [attr]
         (if (integer? attr)
           (continuation! attr)
@@ -256,7 +255,7 @@
         (if (integer? attr)
           (continuation! attr)
           (.reference
-            backend (:inode attr)
+            backend (:nodeid attr)
             (fn [link]
               (if (integer? link)
                 (continuation! link)

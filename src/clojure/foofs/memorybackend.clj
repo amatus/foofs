@@ -34,21 +34,21 @@
    :rdev 0})
 
 (defn attrs-modifier!
-  [state-agent inode f continuation!]
+  [state-agent nodeid f continuation!]
   (send
     state-agent
     (fn [state]
       (let [attrs-table (:attrs-table state)
-            attrs (get attrs-table inode)]
+            attrs (get attrs-table nodeid)]
         (if (nil? attrs)
           (do (continuation! errno-noent) state)
           (let [new-attrs (f attrs)]
             (agent-do state-agent (continuation! new-attrs))
-            (assoc-deep state new-attrs :attrs-table inode)))))))
+            (assoc-deep state new-attrs :attrs-table nodeid)))))))
 
 (defn attribute-modifier!
-  [state-agent inode f attribute continuation!]
-  (attrs-modifier! state-agent inode
+  [state-agent nodeid f attribute continuation!]
+  (attrs-modifier! state-agent nodeid
                    (fn [attrs]
                      (assoc attrs attribute (f (get attrs attribute))))
                    continuation!))
@@ -56,52 +56,47 @@
 (defrecord MemoryBackend
   [^clojure.lang.Agent state-agent]
   FilesystemBackend
-  (lookup [_ inode child continuation!]
+  (lookup [_ nodeid child continuation!]
     (let [state (deref state-agent)
-          lookup-table (:lookup-table state)
-          children (get lookup-table inode)
-          child (if (= "" child)
-                  inode
-                  (get children child))]
-      (continuation! child)))
-  (getattr [_ inode continuation!]
+          lookup-table (:lookup-table state)]
+      (if (= "" child)
+        (continuation! nodeid)
+        (continuation! (get-in lookup-table [nodeid child])))))
+  (getattr [_ nodeid continuation!]
     (let [attrs-table (:attrs-table (deref state-agent))
-          attrs (get attrs-table inode)]
+          attrs (get attrs-table nodeid)]
       (if (nil? attrs)
         (continuation! nil)
-        (continuation! (assoc attrs :inode inode)))))
-  (reference [_ inode continuation!]
-    (attribute-modifier! state-agent inode inc :nlink continuation!))
-  (dereference [_ inode continuation!]
-    (attribute-modifier! state-agent inode dec :nlink continuation!))
-  (clonedir [_ inode continuation!]
+        (continuation! (assoc attrs :nodeid nodeid)))))
+  (reference [_ nodeid continuation!]
+    (attribute-modifier! state-agent nodeid inc :nlink continuation!))
+  (dereference [_ nodeid continuation!]
+    (attribute-modifier! state-agent nodeid dec :nlink continuation!))
+  (clonedir [_ nodeid continuation!]
     (let [state (deref state-agent)
           lookup-table (:lookup-table state)
-          children (get lookup-table inode)
+          children (get lookup-table nodeid)
           attrs-table (:attrs-table state)]
       (continuation!
         (map
-          (fn [kv]
-            (let [[name inode] kv
-                  attrs (get attrs-table inode)]
-              {:name name
-               :nodeid inode
-               :type (:mode attrs)}))
+          (fn [[filename nodeid]]
+            {:name filename
+             :nodeid nodeid
+             :type (get-in attrs-table [nodeid :mode])})
           children))))
-  (readfile [_ inode offset size continuation!]
-    (let [state (deref state-agent)
-          file (get (:file-table state) inode)]
+  (readfile [_ nodeid offset size continuation!]
+    (let [file (get-in (deref state-agent) [:file-table nodeid])]
       (if (nil? file)
         (continuation! nil)
         (continuation! (take size (drop offset file))))))
-  (writefile [_ inode offset size data continuation!]
+  (writefile [_ nodeid offset size data continuation!]
     (send
       state-agent
       (fn [state]
         (let [attrs-table (:attrs-table state)
               file-table (:file-table state)
-              attrs (get attrs-table inode)
-              file (get file-table inode)]
+              attrs (get attrs-table nodeid)
+              file (get file-table nodeid)]
           (if (nil? attrs)
             (do (continuation! errno-noent) state)
             (let [tail-offset (+ offset size)
@@ -116,40 +111,41 @@
               (agent-do state-agent
                         (continuation! {:size (.limit data)}))
               (assoc state
-                     :attrs-table (assoc-deep attrs-table new-size inode :size)
-                     :file-table (assoc file-table inode file-written))))))))
-  (mknod [_ inode filename mode continuation!]
+                     :attrs-table (assoc-deep attrs-table new-size nodeid :size)
+                     :file-table (assoc file-table nodeid file-written))))))))
+  (mknod [_ nodeid filename mode continuation!]
     (send
       state-agent
       (fn [state]
         (let [lookup-table (:lookup-table state)
-              children (get lookup-table inode)
+              children (get lookup-table nodeid)
               attrs-table (:attrs-table state)]
           (if (contains? children filename)
             (do
               (continuation! errno-exist)
               state)
-            (let [child-inode (next-key attrs-table (:next-inode state)
-                                        Long/MIN_VALUE Long/MAX_VALUE)
+            (let [child-nodeid (next-key attrs-table (:next-nodeid state)
+                                         Long/MIN_VALUE Long/MAX_VALUE)
                   attrs (conj empty-attrs
                               {:mode mode
                                :nlink 1})]
               (agent-do state-agent
-                        (continuation! (assoc attrs :inode child-inode)))
+                        (continuation! (assoc attrs :nodeid child-nodeid)))
               (assoc state
-                     :attrs-table (assoc attrs-table child-inode attrs)
-                     :lookup-table (assoc lookup-table inode
-                                          (assoc children filename child-inode))
-                     :next-inode (inc child-inode))))))))
-  (link [_ inode filename target-inode continuation!]
+                     :attrs-table (assoc attrs-table child-nodeid attrs)
+                     :lookup-table (assoc lookup-table nodeid
+                                          (assoc children filename
+                                                 child-nodeid))
+                     :next-nodeid (inc child-nodeid))))))))
+  (link [_ nodeid filename target-nodeid continuation!]
     (send
       state-agent
       (fn [state]
         (let [lookup-table (:lookup-table state)
               attrs-table (:attrs-table state)
-              children (get lookup-table inode)
-              dir-attrs (get attrs-table inode)
-              attrs (get attrs-table target-inode)]
+              children (get lookup-table nodeid)
+              dir-attrs (get attrs-table nodeid)
+              attrs (get attrs-table target-nodeid)]
           (if (contains? children filename)
             (do (continuation! errno-exist) state)
             (if (not (= stat-type-directory
@@ -159,59 +155,59 @@
                 (do (continuation! errno-noent) state)
                 (do
                   (agent-do state-agent
-                            (continuation! (assoc attrs :inode target-inode)))
+                            (continuation! (assoc attrs :nodeid target-nodeid)))
                   (assoc state
-                         :attrs-table (assoc attrs-table target-inode
+                         :attrs-table (assoc attrs-table target-nodeid
                                              (assoc attrs :nlink
                                                     (inc (:nlink attrs))))
-                         :lookup-table (assoc lookup-table inode
+                         :lookup-table (assoc lookup-table nodeid
                                               (assoc children filename
-                                                     target-inode)))))))))))
-  (unlink [_ inode filename continuation!]
+                                                     target-nodeid)))))))))))
+  (unlink [_ nodeid filename continuation!]
     (send
       state-agent
       (fn [state]
         (let [lookup-table (:lookup-table state)
               attrs-table (:attrs-table state)
-              children (get lookup-table inode)
-              child-inode (get children filename)
-              dir-attrs (get attrs-table inode)]
+              children (get lookup-table nodeid)
+              child-nodeid (get children filename)
+              dir-attrs (get attrs-table nodeid)]
           (if (not (= stat-type-directory
                       (bit-and stat-type-mask (:mode dir-attrs))))
             (do (continuation! errno-notdir) state)
-            (if (nil? child-inode)
+            (if (nil? child-nodeid)
               (do (continuation! errno-noent) state)
-              (let [child-attrs (get attrs-table child-inode)]
+              (let [child-attrs (get attrs-table child-nodeid)]
                 (if (= stat-type-directory
                        (bit-and stat-type-mask (:mode child-attrs)))
                   (do (continuation! errno-isdir) state)
                   (let [nlink (dec (:nlink child-attrs))]
                     (continuation! 0)
                     (assoc state
-                           :lookup-table (assoc lookup-table inode
+                           :lookup-table (assoc lookup-table nodeid
                                                 (dissoc children filename))
                            :attrs-table (if (zero? nlink)
-                                          (dissoc attrs-table child-inode)
+                                          (dissoc attrs-table child-nodeid)
                                           (assoc
-                                            attrs-table child-inode
+                                            attrs-table child-nodeid
                                             (assoc child-attrs
                                                    :nlink nlink)))))))))))))
-  (rmdir [_ inode filename continuation!]
+  (rmdir [_ nodeid filename continuation!]
     (send
       state-agent
       (fn [state]
         (let [lookup-table (:lookup-table state)
               attrs-table (:attrs-table state)
-              children (get lookup-table inode)
-              child-inode (get children filename)
-              dir-attrs (get attrs-table inode)]
+              children (get lookup-table nodeid)
+              child-nodeid (get children filename)
+              dir-attrs (get attrs-table nodeid)]
           (if (not (= stat-type-directory
                       (bit-and stat-type-mask (:mode dir-attrs))))
             (do (continuation! errno-notdir) state)
-            (if (nil? child-inode)
+            (if (nil? child-nodeid)
               (do (continuation! errno-noent) state)
-              (let [child-attrs (get attrs-table child-inode)
-                    child-children (get lookup-table child-inode)]
+              (let [child-attrs (get attrs-table child-nodeid)
+                    child-children (get lookup-table child-nodeid)]
                 (if (not (= stat-type-directory
                             (bit-and stat-type-mask (:mode child-attrs))))
                   (do (continuation! errno-notdir) state)
@@ -222,56 +218,56 @@
                       (agent-do state-agent (continuation! 0))
                       (assoc state
                              :lookup-table (dissoc
-                                             (assoc lookup-table inode
+                                             (assoc lookup-table nodeid
                                                     (dissoc children filename))
-                                             child-inode)
+                                             child-nodeid)
                              :attrs-table (if (zero? nlink)
-                                            (dissoc attrs-table child-inode)
+                                            (dissoc attrs-table child-nodeid)
                                             (assoc
-                                              attrs-table child-inode
+                                              attrs-table child-nodeid
                                               (assoc child-attrs
                                                      :nlink nlink))))))))))))))
-  (chmod [_ inode mode continuation!]
-    (attribute-modifier! state-agent inode
+  (chmod [_ nodeid mode continuation!]
+    (attribute-modifier! state-agent nodeid
                          #(bit-or (bit-and stat-type-mask %)
                                   (bit-and stat-mode-mask mode))
                          :mode continuation!))
-  (setuid [_ inode uid continuation!]
-    (attribute-modifier! state-agent inode
+  (setuid [_ nodeid uid continuation!]
+    (attribute-modifier! state-agent nodeid
                          (fn [_] uid)
                          :uid continuation!))
-  (setgid [_ inode gid continuation!]
-    (attribute-modifier! state-agent inode
+  (setgid [_ nodeid gid continuation!]
+    (attribute-modifier! state-agent nodeid
                          (fn [_] gid)
                          :gid continuation!))
-  (truncate [_ inode size continuation!]
+  (truncate [_ nodeid size continuation!]
     (send
       state-agent
       (fn [state]
         (let [attrs-table (:attrs-table state)
               file-table (:file-table state)
-              attrs (get attrs-table inode)
-              file (get file-table inode)]
+              attrs (get attrs-table nodeid)
+              file (get file-table nodeid)]
           (if (nil? attrs)
             (do (continuation! errno-noent) state)
             (do
               (agent-do state-agent (continuation! nil))
               (assoc
                 state
-                :attrs-table (assoc-deep attrs-table size inode :size)
+                :attrs-table (assoc-deep attrs-table size nodeid :size)
                 :file-table (assoc
-                              file-table inode
+                              file-table nodeid
                               (take size
                                     (concat file (repeat (byte 0))))))))))))
-  (setatime [_ inode seconds nseconds continuation!]
-    (attrs-modifier! state-agent inode
+  (setatime [_ nodeid seconds nseconds continuation!]
+    (attrs-modifier! state-agent nodeid
                      (fn [attrs]
                        (assoc attrs :atime seconds :atimensec nseconds))
                      continuation!))
-  (setmtime [_ inode seconds nseconds continuation!]
-    (attrs-modifier! state-agent inode
+  (setmtime [_ nodeid seconds nseconds continuation!]
+    (attrs-modifier! state-agent nodeid
                      (fn [attrs]
                        (assoc attrs :mtime seconds :mtimensec nseconds))
                      continuation!))
-  (rename [_ inode target-inode filename target-filename continuation!]
+  (rename [_ nodeid target-nodeid filename target-filename continuation!]
     (continuation! errno-nosys)))

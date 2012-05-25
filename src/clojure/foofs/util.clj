@@ -15,6 +15,7 @@
 
 (ns foofs.util)
 
+;; TODO: replace this with assoc-in
 (defn assoc-deep
   "Associates val with the 'path' of keys in a nested map."
   [_map _val _key & _keys]

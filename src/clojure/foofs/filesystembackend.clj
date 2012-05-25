@@ -17,34 +17,32 @@
 
 (defprotocol FilesystemBackend
   "The interface provided by a Foofs backend."
-  (lookup [this inode child continuation!]
-          "Lookup the inode of a directory entry.")
-  (getattr [this inode continuation!]
-           "Get the attributes of an inode.")
-  (reference [this inode continuation!]
+  (lookup [this nodeid child continuation!]
+          "Lookup the nodeid of a directory entry.")
+  (getattr [this nodeid continuation!]
+           "Get an inode.")
+  (reference [this nodeid continuation!]
              "Increment link count of an inode.")
-  (dereference [this inode continuation!]
+  (dereference [this nodeid continuation!]
                "Decrement link count of an inode.")
-  (clonedir [this inode continuation!]
+  (clonedir [this nodeid continuation!]
             "Return a lazy sequence of directory entries.")
-  (readfile [this inode offset size continuation!]
+  (readfile [this nodeid offset size continuation!]
             "Return a ByteBuffer or sequence of bytes.")
-  (writefile [this inode offset size data continuation!]
+  (writefile [this nodeid offset size data continuation!]
              "Writes a ByteBuffer to a file.")
-  (mknod [this inode filename mode continuation!]
-         "Create an inode and return its attributes.")
-  (link [this inode filename target-inode continuation!]
-        "Create a hardlink and return the target's attributes.")
-  (unlink [this inode filename continuation!]
+  (mknod [this nodeid filename mode continuation!]
+         "Create an inode and return it.")
+  (link [this nodeid filename target-nodeid continuation!]
+        "Create a hardlink and return the target inode.")
+  (unlink [this nodeid filename continuation!]
           "Unlink a file.")
-  (rmdir [this inode filename continuation!]
+  (rmdir [this nodeid filename continuation!]
          "Remove an empty directory.")
-  (chmod [this inode mode continuation!])
-  (setuid [this inode uid continuation!])
-  (setgid [this inode gid continuation!])
-  (truncate [this inode size continuation!])
-  (setatime [this inode seconds nseconds continuation!])
-  (setmtime [this inode seconds nseconds continuation!])
-  (rename [this inode target-inode filename target-filename continuation!])
-  ;; and so on
-  )
+  (chmod [this nodeid mode continuation!])
+  (setuid [this nodeid uid continuation!])
+  (setgid [this nodeid gid continuation!])
+  (truncate [this nodeid size continuation!])
+  (setatime [this nodeid seconds nseconds continuation!])
+  (setmtime [this nodeid seconds nseconds continuation!])
+  (rename [this nodeid target-nodeid filename target-filename continuation!]))
