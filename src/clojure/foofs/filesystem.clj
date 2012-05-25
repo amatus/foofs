@@ -232,7 +232,7 @@
                 (fn [state]
                   (agent-do readdir-agent
                             (continuation! (take size encoded-dirents)))
-                  (assoc-deep state encoded-dirents :opendirs handle))))))
+                  (assoc-in state [:opendirs handle] encoded-dirents))))))
         (let [dirents ((:opendirs (deref readdir-agent)) handle)]
           (continuation! (take size (drop offset dirents)))))))
   (releasedir [_ {:keys [nodeid arg]} continuation!]

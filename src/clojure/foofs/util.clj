@@ -15,14 +15,6 @@
 
 (ns foofs.util)
 
-;; TODO: replace this with assoc-in
-(defn assoc-deep
-  "Associates val with the 'path' of keys in a nested map."
-  [_map _val _key & _keys]
-  (if (nil? _keys)
-    (assoc _map _key _val)
-    (assoc _map _key (apply assoc-deep (get _map _key) _val _keys))))
-
 (defn next-key
   [_map _key _min _max]
   (first (remove (partial contains? _map) (concat (range _key _max)
