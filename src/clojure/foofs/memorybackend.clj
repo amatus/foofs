@@ -126,6 +126,30 @@
             (agent-do state-agent
                       (continuation! (assoc inode :nodeid child-nodeid)))
             state)))))
+  (mkdir [_ nodeid filename mode continuation!]
+    (send
+      state-agent
+      (fn [state]
+        (if (contains? (get-in state [:lookup-table nodeid]) filename)
+          (do (continuation! errno-exist) state)
+          (let [child-nodeid (next-key (:inode-table state)
+                                       (:next-nodeid state)
+                                       Long/MIN_VALUE Long/MAX_VALUE)
+                inode (assoc empty-inode
+                             :mode (bit-or stat-type-directory mode)
+                             :nlink 2)
+                state (assoc-in state [:inode-table child-nodeid] inode)
+                state (assoc-in state [:lookup-table nodeid filename]
+                                child-nodeid)
+                state (assoc-in state [:lookup-table child-nodeid]
+                                {"." child-nodeid ".." nodeid})
+                nlink (get-in state [:inode-table nodeid :nlink])
+                state (assoc-in state [:inode-table nodeid :nlink]
+                                (inc nlink))
+                state (assoc state :next-nodeid (inc child-nodeid))]
+            (agent-do state-agent
+                      (continuation! (assoc inode :nodeid child-nodeid)))
+            state)))))
   (link [_ nodeid filename target-nodeid continuation!]
     (send
       state-agent
@@ -205,9 +229,7 @@
             (not (empty? (dissoc child-children "." "..")))
             (do (continuation! errno-notempty) state)
             true
-            ;; TODO: 3 is wrong if . or .. don't exist
-            ;;       and we need to (dec (:nlink inode))
-            (let [nlink (- (:nlink child-inode) 3)
+            (let [nlink (- (:nlink child-inode) 2)
                   lookup-table (assoc lookup-table nodeid
                                       (dissoc children filename))
                   lookup-table (dissoc lookup-table child-nodeid)
@@ -216,6 +238,9 @@
                                 (dissoc inode-table child-nodeid)
                                 (assoc-in inode-table [child-nodeid :nlink]
                                           nlink))
+                  inode-table (assoc-in inode-table [nodeid :nlink]
+                                        (dec (get-in inode-table
+                                                     [nodeid :nlink])))
                   state (assoc state :inode-table inode-table)]
               (agent-do state-agent (continuation! 0))
               state))))))

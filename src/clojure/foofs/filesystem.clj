@@ -132,19 +132,12 @@
           (continuation! inode)
           (continuation! (fill-entry inode))))))
   (mkdir [_ {:keys [nodeid arg]} continuation!]
-    ;; TODO: this probably should be a backend op. the parent dir could go
-    ;; away before we can ref it with the .. link.
-    (.mknod
-      backend nodeid (:filename arg)
-      (bit-or stat-type-directory (:mode arg))
+    (.mkdir
+      backend nodeid (:filename arg) (:mode arg)
       (fn [inode]
         (if (integer? inode)
           (continuation! inode)
-          (let [child-nodeid (:nodeid inode)]
-            ;; do we need to wait for these to finish?
-            (.link backend child-nodeid "." child-nodeid skip)
-            (.link backend child-nodeid ".." nodeid skip)
-            (continuation! (fill-entry inode)))))))
+          (continuation! (fill-entry inode))))))
   (unlink [_ {:keys [nodeid arg]} continuation!]
     (.unlink backend nodeid arg continuation!))
   (rmdir [_ {:keys [nodeid arg]} continuation!]

@@ -33,6 +33,8 @@
              "Writes a ByteBuffer to a file.")
   (mknod [this nodeid filename mode continuation!]
          "Create an inode and return it.")
+  (mkdir [this nodeid filename mode continuation!]
+         "Create a directory and return its inode.")
   (link [this nodeid filename target-nodeid continuation!]
         "Create a hardlink and return the target inode.")
   (unlink [this nodeid filename continuation!]
