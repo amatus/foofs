@@ -278,4 +278,48 @@
                      #(assoc % :mtime seconds :mtimensec nseconds)
                      continuation!))
   (rename [_ nodeid target-nodeid filename target-filename continuation!]
-    (continuation! errno-nosys)))
+    (send
+      state-agent
+      (fn [state]
+        (let [inode-table (:inode-table state)
+              lookup-table (:lookup-table state)
+              dir-inode (get inode-table nodeid)
+              target-dir-inode (get inode-table target-nodeid)
+              children (get lookup-table nodeid)
+              file-nodeid (get children filename)
+              file-inode (get inode-table file-nodeid)]
+          (cond
+            (not (= stat-type-directory
+                    (bit-and stat-type-mask (:mode dir-inode))))
+            (do (continuation! errno-notdir) state)
+            (not (= stat-type-directory
+                    (bit-and stat-type-mask (:mode target-dir-inode))))
+            (do (continuation! errno-notdir) state)
+            (nil? file-inode)
+            (do (continuation! errno-noent) state)
+            true
+            (let [lookup-table (assoc lookup-table nodeid
+                                      (dissoc children filename))
+                  lookup-table (assoc-in lookup-table [target-nodeid
+                                                       target-filename]
+                                         file-nodeid)
+                  ;; If we are renaming a directory fixup ".." link
+                  file-isdir (= stat-type-directory
+                                (bit-and stat-type-mask (:mode file-inode)))
+                  lookup-table (if file-isdir
+                                 (assoc-in lookup-table [file-nodeid
+                                                         ".."]
+                                           target-nodeid)
+                                 lookup-table)
+                  inode-table (if file-isdir
+                                (assoc-in inode-table [nodeid :nlink]
+                                          (dec (:nlink dir-inode)))
+                                inode-table)
+                  inode-table (if file-isdir
+                                (assoc-in inode-table [target-nodeid :nlink]
+                                          (inc (:nlink target-dir-inode)))
+                                inode-table)
+                  state (assoc state :inode-table inode-table
+                               :lookup-table lookup-table)]
+              (agent-do state-agent (continuation! nil))
+              state)))))))
