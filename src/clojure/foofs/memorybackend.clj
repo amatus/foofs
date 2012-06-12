@@ -83,7 +83,7 @@
   (readfile [_ nodeid offset size continuation!]
     (let [file (get-in (deref state-agent) [:file-table nodeid])]
       (if (nil? file)
-        (continuation! nil)
+        (continuation! errno-noent)
         (continuation! (take size (drop offset file))))))
   (writefile [_ nodeid offset size data continuation!]
     (send

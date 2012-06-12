@@ -161,14 +161,7 @@
           (continuation! {:handle 0
                           :flags 0})))))
   (readfile [_ {:keys [nodeid arg]} continuation!]
-    (let [offset (:offset arg)
-          size (:size arg)]
-      (.readfile
-        backend nodeid offset size
-        (fn [buffer]
-          (if (nil? buffer)
-            (continuation! errno-noent)
-            (continuation! buffer))))))
+    (.readfile backend nodeid (:offset arg) (:size arg) continuation!))
   (writefile [_ {:keys [nodeid arg]} continuation!]
     (.writefile
       backend nodeid (:offset arg) (:size arg) (:data arg) continuation!))
