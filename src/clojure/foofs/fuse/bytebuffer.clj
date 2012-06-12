@@ -98,7 +98,7 @@
   (lazy-seq (when (.hasRemaining buffer)
               (cons (.get buffer) (buffer-seq! buffer)))))
 
-(defn parse-utf8
+(defn parse-bytes-until-zero
   [buffer]
   (let [buffer2 (.duplicate buffer)
         length (count-until (partial = 0) (buffer-seq! buffer2))
@@ -107,7 +107,13 @@
     (.position buffer2 (.position buffer))
     (.get buffer2 string-bytes)
     (when (.hasRemaining buffer2) (.get buffer2))
-    [(String. string-bytes "UTF-8") buffer2]))
+    [string-bytes buffer2]))
+
+(def parse-utf8
+  (domonad
+    parser-m
+    [string-bytes parse-bytes-until-zero]
+    (String. string-bytes "UTF-8")))
 
 (defn write-int16
   [x]

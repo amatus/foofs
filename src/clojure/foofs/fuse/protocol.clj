@@ -163,6 +163,14 @@
      :uid uid
      :gid gid}))
 
+(def parse-symlink-in
+  (domonad
+    parser-m
+    [filename parse-utf8
+     link-target parse-bytes-until-zero]
+    {:filename filename
+     :link-target link-target}))
+
 (def parse-mknod-in
   (domonad
     parser-m
@@ -431,6 +439,12 @@
    op-setattr {:arg-parser parse-setattr-in
                :processor! (partial process-generic!
                                     #(.setattr %1 %2 %3) write-attr-out)}
+   op-readlink {:arg-parser parse-nothing
+                :processor! (partial process-generic!
+                                     #(.readlink %1 %2 %3) write-bytes)}
+   op-symlink {:arg-parser parse-symlink-in
+               :processor! (partial process-generic!
+                                    #(.symlink %1 %2 %3) write-entry-out)}
    op-mknod {:arg-parser parse-mknod-in
              :processor! (partial process-generic!
                                   #(.mknod %1 %2 %3) write-entry-out)}

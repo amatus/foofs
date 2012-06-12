@@ -33,6 +33,17 @@
    :gid 0
    :rdev 0})
 
+;; this is obviously a state monadic function
+(defn make-inode
+  [state mode]
+  (let [child-nodeid (next-key (:inode-table state)
+                               (:next-nodeid state)
+                               Long/MIN_VALUE Long/MAX_VALUE)
+        inode (assoc empty-inode :mode mode)
+        state (assoc-in state [:inode-table child-nodeid] inode)
+        state (assoc state :next-nodeid (inc child-nodeid))]
+    [state child-nodeid]))
+
 (defn inode-modifier!
   [state-agent nodeid f continuation!]
   (send
@@ -115,14 +126,12 @@
       (fn [state]
         (if (contains? (get-in state [:lookup-table nodeid]) filename)
           (do (continuation! errno-exist) state)
-          (let [child-nodeid (next-key (:inode-table state)
-                                       (:next-nodeid state)
-                                       Long/MIN_VALUE Long/MAX_VALUE)
-                inode (assoc empty-inode :mode mode :nlink 1)
-                state (assoc-in state [:inode-table child-nodeid] inode)
+          (let [[state child-nodeid] (make-inode state mode)
+                state (assoc-in state [:inode-table child-nodeid :nlink] 1)
                 state (assoc-in state [:lookup-table nodeid filename]
                                 child-nodeid)
-                state (assoc state :next-nodeid (inc child-nodeid))]
+                state (assoc state :next-nodeid (inc child-nodeid))
+                inode (get-in state [:inode-table child-nodeid])]
             (agent-do state-agent
                       (continuation! (assoc inode :nodeid child-nodeid)))
             state)))))
@@ -132,13 +141,9 @@
       (fn [state]
         (if (contains? (get-in state [:lookup-table nodeid]) filename)
           (do (continuation! errno-exist) state)
-          (let [child-nodeid (next-key (:inode-table state)
-                                       (:next-nodeid state)
-                                       Long/MIN_VALUE Long/MAX_VALUE)
-                inode (assoc empty-inode
-                             :mode (bit-or stat-type-directory mode)
-                             :nlink 2)
-                state (assoc-in state [:inode-table child-nodeid] inode)
+          (let [[state child-nodeid] (make-inode
+                                       state (bit-or stat-type-directory mode))
+                state (assoc-in state [:inode-table child-nodeid :nlink] 2)
                 state (assoc-in state [:lookup-table nodeid filename]
                                 child-nodeid)
                 state (assoc-in state [:lookup-table child-nodeid]
@@ -146,7 +151,8 @@
                 nlink (get-in state [:inode-table nodeid :nlink])
                 state (assoc-in state [:inode-table nodeid :nlink]
                                 (inc nlink))
-                state (assoc state :next-nodeid (inc child-nodeid))]
+                state (assoc state :next-nodeid (inc child-nodeid))
+                inode (get-in state [:inode-table child-nodeid])]
             (agent-do state-agent
                       (continuation! (assoc inode :nodeid child-nodeid)))
             state)))))
@@ -322,4 +328,27 @@
                   state (assoc state :inode-table inode-table
                                :lookup-table lookup-table)]
               (agent-do state-agent (continuation! nil))
-              state)))))))
+              state))))))
+  (symlink [_ nodeid filename link-target continuation!]
+    (send
+      state-agent
+      (fn [state]
+        (if (contains? (get-in state [:lookup-table nodeid]) filename)
+          (do (continuation! errno-exist) state)
+          (let [[state child-nodeid] (make-inode
+                                       state
+                                       (bit-or stat-type-link 0777))
+                state (assoc-in state [:inode-table child-nodeid :nlink] 1)
+                state (assoc-in state [:lookup-table nodeid filename]
+                                child-nodeid)
+                state (assoc state :next-nodeid (inc child-nodeid))
+                state (assoc-in state [:file-table child-nodeid] link-target)
+                inode (get-in state [:inode-table child-nodeid])]
+            (agent-do state-agent
+                      (continuation! (assoc inode :nodeid child-nodeid)))
+            state)))))
+  (readlink [_ nodeid continuation!]
+    (let [file (get-in (deref state-agent) [:file-table nodeid])]
+      (if (nil? file)
+        (continuation! errno-noent)
+        (continuation! file)))))

@@ -47,4 +47,6 @@
   (truncate [this nodeid size continuation!])
   (setatime [this nodeid seconds nseconds continuation!])
   (setmtime [this nodeid seconds nseconds continuation!])
-  (rename [this nodeid target-nodeid filename target-filename continuation!]))
+  (rename [this nodeid target-nodeid filename target-filename continuation!])
+  (symlink [this nodeid filename link-target continuation!])
+  (readlink [this nodeid continuation!]))

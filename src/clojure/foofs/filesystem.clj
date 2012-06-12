@@ -124,6 +124,15 @@
         set-atime!
         set-mtime!
         #(.getattr this request continuation!))))
+  (readlink [_ {:keys [nodeid]} continuation!]
+    (.readlink backend nodeid continuation!))
+  (symlink [_ {:keys [nodeid arg]} continuation!]
+    (.symlink
+      backend nodeid (:filename arg) (:link-target arg)
+      (fn [inode]
+        (if (integer? inode)
+          (continuation! inode)
+          (continuation! (fill-entry inode))))))
   (mknod [_ {:keys [nodeid arg]} continuation!]
     (.mknod
       backend nodeid (:filename arg) (:mode arg)

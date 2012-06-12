@@ -21,6 +21,8 @@
   (forget [this request] "I forget.")
   (getattr [this request continuation!] "Get inode attributes.")
   (setattr [this request continuation!] "Set inode attributes.")
+  (readlink [this request continuation!] "Read a symlink.")
+  (symlink [this request continuation!] "Create a symlink.")
   (mknod [this request continuation!] "Create inode.")
   (mkdir [this request continuation!] "Create directory.")
   (unlink [this request continuation!] "Unlink a file.")
