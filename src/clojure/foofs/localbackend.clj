@@ -64,6 +64,17 @@
                      (assoc inode attribute (f (get inode attribute))))
                    continuation!))
 
+(defn read-file
+  "Execute a synchronous read of a file."
+  [{:keys [block-list block-size n k] :as file} offset size]
+  (let [start-blockid (quot offset block-size)
+        end-blockid (quot (+ size offset) block-size) ;; one past the last
+        block-count (- end-blockid start-blockid)
+        blocks (take block-count (drop start-blockid block-list))]
+    (for [block blocks]
+      ;; XXX get blocks from local filesystem (in parallel?)
+      )))
+
 ;; TODO: Implement CHK encryption, Reed-Solomon coding, and store the blocks
 ;; in local files.
 (defrecord LocalBackend
@@ -94,10 +105,12 @@
              :type (get-in inode-table [child-nodeid :mode])})
           (get-in state [:lookup-table nodeid])))))
   (readfile [_ nodeid offset size continuation!]
+    ;; XXX get length from inode table and clamp start and offset
     (let [file (get-in (deref state-agent) [:file-table nodeid])]
       (if (nil? file)
         (continuation! errno-noent)
-        (continuation! (take size (drop offset file))))))
+        ;; TODO Put this on another thread?
+        (continuation! (read-file file offset size)))))
   (writefile [_ nodeid offset size data continuation!]
     (send
       state-agent
@@ -108,20 +121,8 @@
               file (get file-table nodeid)]
           (if (nil? inode)
             (do (continuation! errno-noent) state)
-            (let [tail-offset (+ offset size)
-                  tail-size (- (max tail-offset (:size inode)) tail-offset)
-                  file-extended (concat file (repeat (byte 0)))
-                  file-written (concat
-                                 (take offset file-extended)
-                                 (buffer-seq! data)
-                                 (take tail-size
-                                       (drop tail-offset file-extended)))
-                  new-size (count file-written)
-                  state (assoc-in state [:inode-table nodeid :size] new-size)
-                  state (assoc-in state [:file-table nodeid] file-written)]
-              (agent-do state-agent
-                        (continuation! {:size (.limit data)}))
-              state))))))
+            ;; XXX read partial blocks, do write, store new blocks
+            state)))))
   (mknod [_ nodeid filename mode continuation!]
     (send
       state-agent
