@@ -134,20 +134,18 @@
     [nil (.putLong buffer x)]))
 
 (def bytes-class (class (byte-array 0)))
-(defn write-bytes
+(defn to-byte-array
   [x]
   (cond
-    (instance? bytes-class x) (fn write-byte-array!
-                                [buffer]
-                                [nil (.put buffer x)])
-    (instance? ByteBuffer x) (fn write-byte-buffer!
-                               [buffer]
-                               [nil (.put buffer (.array x))])
-    (every? number? x)
-    (fn write-byte-seq!
-      [buffer]
-      (let [bytes-array (into-array Byte/TYPE (map #(.byteValue %) x))]
-        [nil (.put buffer bytes-array)]))))
+    (instance? bytes-class x) x
+    (instance? ByteBuffer x) (.array x)
+    (every? number? x) (into-array Byte/TYPE (map #(.byteValue %) x))))
+
+(defn write-bytes
+  [x]
+  (fn bytes-write!
+    [buffer]
+    [nil (.put buffer (to-byte-array x))]))
 
 (defn pad
   [x]

@@ -16,7 +16,7 @@
 (ns foofs.localbackend
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
         [foofs.fuse bytebuffer jna]
-        foofs.util))
+        [foofs util crypto]))
 
 (def empty-inode
   {:size 0
