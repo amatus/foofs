@@ -1,8 +1,8 @@
 (ns foofs.crypto
-  (:use foofs.bytebuffer)
+  (:use foofs.fuse.bytebuffer)
   (:import java.security.MessageDigest
            javax.crypto.Cipher
-           (javax.crypto.spec IVParameterSpec SecretKeySpec)))
+           (javax.crypto.spec IvParameterSpec SecretKeySpec)))
 
 (defn sha-512
   [message]
