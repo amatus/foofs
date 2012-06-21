@@ -16,7 +16,8 @@
 (ns foofs.localbackend
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
         [foofs.fuse bytebuffer jna]
-        [foofs util crypto]))
+        [foofs crypto util])
+  (:import java.util.concurrent.LinkedBlockingQueue))
 
 (def empty-inode
   {:size 0
@@ -66,14 +67,24 @@
 
 (defn read-file
   "Execute a synchronous read of a file."
-  [{:keys [block-list block-size n k] :as file} offset size]
+  [executor salt {:keys [block-list block-size n k] :as file} offset size]
   (let [start-blockid (quot offset block-size)
         end-blockid (quot (+ size offset) block-size) ;; one past the last
         block-count (- end-blockid start-blockid)
-        blocks (take block-count (drop start-blockid block-list))]
-    (for [block blocks]
-      ;; XXX get blocks from local filesystem (in parallel?)
-      )))
+        blocks (take block-count (drop start-blockid block-list))
+        blocking-queue (LinkedBlockingQueue.)]
+    (doseq [block blocks]
+      ;; Should the storage scheduler have its own executor or use ours?
+      (.execute executor #(fetch-block blocking-queue block)))
+    (loop [fetched-blocks {}]
+      (if (= block-count (count fetched-blocks))
+        (drop (rem offset block-size)
+              (take size
+                    (flatten
+                      (for [block blocks]
+                        (get fetched-blocks block)))))
+        (let [[block block-bytes] (.take blocking-queue)]
+          (recur (assoc fetched-blocks block block-bytes)))))))
 
 ;; TODO: Implement CHK encryption, Reed-Solomon coding, and store the blocks
 ;; in local files.
@@ -105,12 +116,18 @@
              :type (get-in inode-table [child-nodeid :mode])})
           (get-in state [:lookup-table nodeid])))))
   (readfile [_ nodeid offset size continuation!]
-    ;; XXX get length from inode table and clamp start and offset
-    (let [file (get-in (deref state-agent) [:file-table nodeid])]
-      (if (nil? file)
+    (let [state (deref state-agent)
+          file (get-in state [:file-table nodeid])
+          length (get-in state [:inode-table nodeid :size])
+          salt (get state :salt)
+          executor (get state :storage-executor)
+          offset (min length offset)
+          size (- (min length (+ offset size)) offset)]
+      (if (or (nil? file) (nil? length))
         (continuation! errno-noent)
-        ;; TODO Put this on another thread?
-        (continuation! (read-file file offset size)))))
+        (.execute
+          executor
+          #(continuation! (read-file executor salt file offset size))))))
   (writefile [_ nodeid offset size data continuation!]
     (send
       state-agent
