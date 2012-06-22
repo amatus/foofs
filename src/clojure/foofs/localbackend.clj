@@ -15,9 +15,10 @@
 
 (ns foofs.localbackend
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
+        foofs.storage.scheduler
         [foofs.fuse bytebuffer jna]
         [foofs crypto util])
-  (:import java.util.concurrent.LinkedBlockingQueue))
+  (:import [java.util.concurrent Executor LinkedBlockingQueue]))
 
 (def empty-inode
   {:size 0
@@ -67,15 +68,16 @@
 
 (defn read-file
   "Execute a synchronous read of a file."
-  [executor salt {:keys [block-list block-size n k] :as file} offset size]
+  [scheduler salt {:keys [block-list block-size n k] :as file} offset size]
   (let [start-blockid (quot offset block-size)
         end-blockid (quot (+ size offset) block-size) ;; one past the last
         block-count (- end-blockid start-blockid)
         blocks (take block-count (drop start-blockid block-list))
         blocking-queue (LinkedBlockingQueue.)]
     (doseq [block blocks]
-      ;; Should the storage scheduler have its own executor or use ours?
-      (.execute executor #(fetch-block blocking-queue block)))
+      (.fetch-block scheduler block
+                    (fn [block-bytes]
+                      (.put blocking-queue [block block-bytes]))))
     (loop [fetched-blocks {}]
       (if (= block-count (count fetched-blocks))
         (drop (rem offset block-size)
@@ -89,7 +91,9 @@
 ;; TODO: Implement CHK encryption, Reed-Solomon coding, and store the blocks
 ;; in local files.
 (defrecord LocalBackend
-  [^clojure.lang.Agent state-agent]
+  [^clojure.lang.Agent state-agent
+   ^Scheduler scheduler
+   ^Executor executor]
   FilesystemBackend
   (lookup [_ nodeid child continuation!]
     (let [lookup-table (:lookup-table (deref state-agent))]
@@ -120,14 +124,13 @@
           file (get-in state [:file-table nodeid])
           length (get-in state [:inode-table nodeid :size])
           salt (get state :salt)
-          executor (get state :storage-executor)
           offset (min length offset)
           size (- (min length (+ offset size)) offset)]
       (if (or (nil? file) (nil? length))
         (continuation! errno-noent)
         (.execute
           executor
-          #(continuation! (read-file executor salt file offset size))))))
+          #(continuation! (read-file scheduler salt file offset size))))))
   (writefile [_ nodeid offset size data continuation!]
     (send
       state-agent
