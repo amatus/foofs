@@ -75,9 +75,8 @@
         blocks (take block-count (drop start-blockid block-list))
         blocking-queue (LinkedBlockingQueue.)]
     (doseq [block blocks]
-      (.fetch-block scheduler block
-                    (fn [block-bytes]
-                      (.put blocking-queue [block block-bytes]))))
+      (.fetch-block scheduler salt block block-size n k
+                    #(.put blocking-queue [block %])))
     (loop [fetched-blocks {}]
       (if (= block-count (count fetched-blocks))
         (drop (rem offset block-size)
@@ -86,7 +85,9 @@
                       (for [block blocks]
                         (get fetched-blocks block)))))
         (let [[block block-bytes] (.take blocking-queue)]
-          (recur (assoc fetched-blocks block block-bytes)))))))
+          (if (nil? block-bytes)
+            errno-io
+            (recur (assoc fetched-blocks block block-bytes))))))))
 
 ;; TODO: Implement CHK encryption, Reed-Solomon coding, and store the blocks
 ;; in local files.

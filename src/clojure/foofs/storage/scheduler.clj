@@ -14,13 +14,27 @@
 ; with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns foofs.storage.scheduler
+  (:use [foofs blocks crypto])
   (:import java.util.concurrent.Executor))
 
 (defprotocol Scheduler
-  (fetch-block [this block continuation!]))
+  (fetch-block [this salt block block-size n k continuation!]))
 
 (defrecord BasicScheduler
-  [^Executor executor]
+  [^Executor executor
+   read-block]
   Scheduler
-  (fetch-block [_ block continuation!]
-    (continuation! nil)))
+  (fetch-block [_ salt block block-size n k continuation!]
+    (.execute
+      executor
+      (fn []
+        (let [[e-hash e-key] block
+              e-block (read-block e-hash block-size n k)
+              test-hash (sha-512 e-block)]
+          (if (= e-hash test-hash)
+            (let [f-block (decode-block e-block e-key salt)
+                  test-hash (sha-512 f-block)]
+              (if (= e-key test-hash)
+                (continuation! f-block)
+                (continuation! nil)))
+            (continuation! nil)))))))
