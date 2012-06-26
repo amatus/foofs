@@ -31,3 +31,26 @@
 (defmacro agent-do
   [_agent f]
   `(send ~_agent #(do ~f %)))
+
+(def base32-alphabet [\A \B \C \D \E \F \G \H \I
+                      \J \K \L \M \N \O \P \Q \R
+                      \S \T \U \V \W \X \Y \Z \2
+                      \3 \4 \5 \6 \7])
+
+(defn to-32
+  [x]
+  (nth base32-alphabet (bit-and 0x1f x)))
+ 
+(defn base32-encode
+  [byte-seq]
+  (mapcat (fn
+            [[a b c d e]]
+            [(to-32 (bit-shift-right a 3))
+             (to-32 (bit-or (bit-shift-left a 2) (bit-shift-right b 6)))
+             (to-32 (bit-shift-right b 1))
+             (to-32 (bit-or (bit-shift-left b 4) (bit-shift-right c 4)))
+             (to-32 (bit-or (bit-shift-left c 1) (bit-shift-right d 7)))
+             (to-32 (bit-shift-right d 2))
+             (to-32 (bit-or (bit-shift-left d 3) (bit-shift-left e 5)))
+             (to-32 e)])
+          (partition 5 5 (repeat (byte 0)) byte-seq)))
