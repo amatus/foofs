@@ -31,10 +31,10 @@
         (let [[e-hash e-key] block
               e-block (read-block e-hash block-size n k)
               test-hash (sha-512 e-block)]
-          (if (= e-hash test-hash)
+          (if (= (seq e-hash) (seq test-hash))
             (let [f-block (decode-block e-block e-key salt)
                   test-hash (sha-512 f-block)]
-              (if (= e-key test-hash)
+              (if (= (seq e-key) (seq test-hash))
                 (continuation! f-block)
                 (continuation! nil)))
             (continuation! nil)))))))

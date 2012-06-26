@@ -86,7 +86,7 @@
   "Execute a synchronous read of a file."
   [scheduler salt {:keys [block-list block-size n k] :as file} offset size]
   (let [start-blockid (quot offset block-size)
-        end-blockid (quot (+ size offset) block-size) ;; one past the last
+        end-blockid (inc (quot (+ size offset -1) block-size)) ;; one past
         block-count (- end-blockid start-blockid)
         blocks (take block-count (drop start-blockid block-list))
         blocking-queue (LinkedBlockingQueue.)]
@@ -95,11 +95,9 @@
                     #(.put blocking-queue [block %])))
     (loop [fetched-blocks {}]
       (if (= block-count (count fetched-blocks))
-        (drop (rem offset block-size)
-              (take size
-                    (flatten
-                      (for [block blocks]
-                        (get fetched-blocks block)))))
+        (take size (drop (rem offset block-size)
+                    (apply concat (for [block blocks]
+                                    (get fetched-blocks block)))))
         (let [[block block-bytes] (.take blocking-queue)]
           (if (nil? block-bytes)
             errno-io
