@@ -139,6 +139,7 @@
 (when (Platform/isLinux)
   (do
     (def errno-noent 2)
+    (def errno-io 5)
     (def errno-nomem 12)
     (def errno-exist 17)
     (def errno-notdir 20)
@@ -163,6 +164,7 @@
 (when (Platform/isFreeBSD)
   (do
     (def errno-noent 2)
+    (def errno-io 5)
     (def errno-nomem 12)
     (def errno-exist 17)
     (def errno-notdir 20)

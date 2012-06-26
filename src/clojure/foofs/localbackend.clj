@@ -15,10 +15,11 @@
 
 (ns foofs.localbackend
   (:use [foofs.filesystembackend :only [FilesystemBackend]]
-        foofs.storage.scheduler
+        [foofs.storage.scheduler :only [Scheduler]]
         [foofs.fuse bytebuffer jna]
         [foofs crypto util])
-  (:import [java.util.concurrent Executor LinkedBlockingQueue]))
+  (:import java.io.FileInputStream
+           [java.util.concurrent Executor LinkedBlockingQueue]))
 
 (def empty-inode
   {:size 0
@@ -66,6 +67,21 @@
                      (assoc inode attribute (f (get inode attribute))))
                    continuation!))
 
+(defn read-block
+  [e-hash block-size n k]
+  (let [hash-chars (base32-encode e-hash)
+        dir-name (String. (into-array Character/TYPE (take 2 hash-chars)))
+        file-name (String. (into-array Character/TYPE (drop 2 hash-chars)))
+        path (str "/tmp/foofs/" dir-name "/" file-name)]
+    (try
+      (let [file-in (FileInputStream. path)
+            block-bytes (byte-array block-size)
+            size (.read file-in block-bytes)]
+        (if (= size block-size)
+          block-bytes
+          nil))
+      (catch Exception _))))
+
 (defn read-file
   "Execute a synchronous read of a file."
   [scheduler salt {:keys [block-list block-size n k] :as file} offset size]
@@ -93,8 +109,8 @@
 ;; in local files.
 (defrecord LocalBackend
   [^clojure.lang.Agent state-agent
-   ^Scheduler scheduler
-   ^Executor executor]
+   ^foofs.storage.scheduler.Scheduler scheduler
+   ^java.util.concurrent.Executor executor]
   FilesystemBackend
   (lookup [_ nodeid child continuation!]
     (let [lookup-table (:lookup-table (deref state-agent))]
