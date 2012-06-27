@@ -36,6 +36,12 @@
    :gid 0
    :rdev 0})
 
+(def empty-file
+  {:block-list []
+   :block-size 65536
+   :n 0
+   :k 0})
+
 ;; this is obviously a state monadic function
 (defn make-inode
   [state mode]
@@ -136,16 +142,16 @@
           (get-in state [:lookup-table nodeid])))))
   (readfile [_ nodeid offset size continuation!]
     (let [state (deref state-agent)
-          file (get-in state [:file-table nodeid])
-          length (get-in state [:inode-table nodeid :size])
-          salt (get state :salt)
-          offset (min length offset)
-          size (- (min length (+ offset size)) offset)]
-      (if (or (nil? file) (nil? length))
+          file (get-in state [:file-table nodeid] empty-file)
+          file-size (get-in state [:inode-table nodeid :size])
+          salt (get state :salt)]
+      (if (nil? file-size)
         (continuation! errno-noent)
-        (.execute
-          executor
-          #(continuation! (read-file scheduler salt file offset size))))))
+        (let [offset (min file-size offset)
+              size (- (min file-size (+ offset size)) offset)]
+          (.execute
+            executor
+            #(continuation! (read-file scheduler salt file offset size)))))))
   (writefile [_ nodeid offset size data continuation!]
     (send
       state-agent
@@ -153,7 +159,7 @@
         (let [inode-table (:inode-table state)
               file-table (:file-table state)
               inode (get inode-table nodeid)
-              file (get file-table nodeid)]
+              file (get file-table nodeid empty-file)]
           (if (nil? inode)
             (do (continuation! errno-noent) state)
             ;; XXX read partial blocks, do write, store new blocks
