@@ -153,17 +153,32 @@
             executor
             #(continuation! (read-file scheduler salt file offset size)))))))
   (writefile [_ nodeid offset size data continuation!]
+    ;; TODO: Write out all the complete blocks before bothering the state agent
     (send
       state-agent
       (fn [state]
         (let [inode-table (:inode-table state)
-              file-table (:file-table state)
-              inode (get inode-table nodeid)
-              file (get file-table nodeid empty-file)]
+              inode (get inode-table nodeid)]
           (if (nil? inode)
             (do (continuation! errno-noent) state)
-            ;; XXX read partial blocks, do write, store new blocks
-            state)))))
+            (let [file-table (:file-table state)
+                  file (get file-table nodeid empty-file)
+                  block-list (:block-list file)
+                  block-size (:block-size file)
+                  first-blockid (quot offset block-size)
+                  last-blockid (quot (+ size offset) block-size)
+                  ;; write zero blocks until first-blockid
+                  blocks (if (< first-blockid (count block-list))
+                           block-list
+                           (let [zeros (byte-array block-size)
+                                 zero-block (write-block zeros)]
+                             (take first-blockid
+                                   (concat block-list
+                                           (repeat zero-block)))))
+                  ;; get overlapping blocks
+                  ;; XXX
+                  ]
+              state))))))
   (mknod [_ nodeid filename mode continuation!]
     (send
       state-agent
