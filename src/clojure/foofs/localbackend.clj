@@ -18,8 +18,9 @@
         [foofs.storage.scheduler :only [Scheduler]]
         [foofs.fuse bytebuffer jna]
         [foofs crypto util])
-  (:import java.io.FileInputStream
-           [java.util.concurrent Executor LinkedBlockingQueue]))
+  (:import [java.io File FileInputStream FileOutputStream]
+           [java.util.concurrent ArrayBlockingQueue Executor
+            LinkedBlockingQueue]))
 
 (def empty-inode
   {:size 0
@@ -73,8 +74,9 @@
                      (assoc inode attribute (f (get inode attribute))))
                    continuation!))
 
-(defn read-block
-  [e-hash block-size n k]
+(defn local-read-block
+  "Callback for BasicScheduler to read an e-block from the local filesystem."
+  [e-hash block-size _ _]
   (let [hash-chars (base32-encode e-hash)
         dir-name (String. (into-array Character/TYPE (take 2 hash-chars)))
         file-name (String. (into-array Character/TYPE (drop 2 hash-chars)))
@@ -88,9 +90,24 @@
           nil))
       (catch Exception _))))
 
+(defn local-write-block
+  "Callback for BasicScheduler to write an e-block from the local filesystem."
+  [e-hash e-block _ _]
+  (let [hash-chars (base32-encode e-hash)
+        dir-name (String. (into-array Character/TYPE (take 2 hash-chars)))
+        file-name (String. (into-array Character/TYPE (drop 2 hash-chars)))
+        dir-path (str "/tmp/foofs/" dir-name)
+        path (str dir-path "/" file-name)]
+    (try
+      (.mkdirs (File. dir-path))
+      (.write (FileOutputStream. path) (to-byte-array e-block))
+      true
+      (catch Exception _
+        false))))
+
 (defn read-file
   "Execute a synchronous read of a file."
-  [scheduler salt {:keys [block-list block-size n k] :as file} offset size]
+  [scheduler salt {:keys [block-list block-size n k]} offset size]
   (let [start-blockid (quot offset block-size)
         end-blockid (inc (quot (+ size offset -1) block-size)) ;; one past
         block-count (- end-blockid start-blockid)
@@ -109,8 +126,60 @@
             errno-io
             (recur (assoc fetched-blocks block block-bytes))))))))
 
-;; TODO: Implement CHK encryption, Reed-Solomon coding, and store the blocks
-;; in local files.
+(defn read-block
+  [scheduler salt block block-size n k]
+  (let [blocking-queue (ArrayBlockingQueue. 1)]
+    (.fetch-block scheduler salt block block-size n k
+                  ;; wrapped in a vec because the queue doesn't like nil
+                  #(.put blocking-queue [%]))
+    (first (.take blocking-queue))))
+
+(defn write-block!
+  [scheduler salt n k block-bytes]
+  (let [blocking-queue (ArrayBlockingQueue. 1)]
+    (.store-block scheduler salt block-bytes n k
+                  ;; wrapped in a vec because the queue doesn't like nil
+                  #(.put blocking-queue [%]))
+    (first (.take blocking-queue))))
+
+(defn get-nth-or-zero!
+  [scheduler salt {:keys [block-list block-size n k]} index]
+  (if (< index (count block-list))
+    (nth block-list index)
+    (let [block-bytes (byte-array block-size)]
+      (write-block! scheduler salt n k block-bytes))))
+
+(defn write-file!
+  [scheduler salt {:keys [block-list block-size n k] :as file} offset size data]
+  (let [first-blockid (quot offset block-size)
+        last-blockid (quot (+ size offset) block-size)
+        data (to-byte-array data)]
+    (doall
+      (for [index (range (max (inc last-blockid) (count block-list)))]
+        (cond
+          (and (> index first-blockid) (< index last-blockid))
+          (let [f-block (take
+                          block-size
+                          (drop (- (* block-size index) offset) data))]
+            (write-block! scheduler salt n k f-block))
+          (or (= index first-blockid) (= index last-blockid))
+          (let [block (get-nth-or-zero! scheduler salt file index)
+                block-bytes (read-block scheduler salt block block-size n k)
+                data-offset (- (* block-size index) offset)
+                f-block
+                (if (pos? data-offset)
+                  (concat
+                    (drop data-offset data) ;; (assert (= size (count data)))
+                    (drop (- block-size (- size data-offset)) block-bytes))
+                  (concat
+                    (take (- data-offset) block-bytes)
+                    (take (+ block-size data-offset) data)
+                    (drop (+ size (- data-offset)) block-bytes)))]
+            (write-block! scheduler salt n k f-block))
+          true
+          (get-nth-or-zero! scheduler salt file index))))))
+
+;; TODO: Reed-Solomon coding.
 (defrecord LocalBackend
   [^clojure.lang.Agent state-agent
    ^foofs.storage.scheduler.Scheduler scheduler
@@ -157,27 +226,18 @@
     (send
       state-agent
       (fn [state]
-        (let [inode-table (:inode-table state)
-              inode (get inode-table nodeid)]
+        (let [inode (get-in state [:inode-table nodeid])]
           (if (nil? inode)
             (do (continuation! errno-noent) state)
-            (let [file-table (:file-table state)
-                  file (get file-table nodeid empty-file)
-                  block-list (:block-list file)
-                  block-size (:block-size file)
-                  first-blockid (quot offset block-size)
-                  last-blockid (quot (+ size offset) block-size)
-                  ;; write zero blocks until first-blockid
-                  blocks (if (< first-blockid (count block-list))
-                           block-list
-                           (let [zeros (byte-array block-size)
-                                 zero-block (write-block zeros)]
-                             (take first-blockid
-                                   (concat block-list
-                                           (repeat zero-block)))))
-                  ;; get overlapping blocks
-                  ;; XXX
-                  ]
+            (let [file (get-in state [:file-table nodeid] empty-file)
+                  salt (get state :salt)
+                  block-list (write-file! scheduler salt file offset size data)
+                  inode (assoc inode :size (max (:size inode)
+                                                (+ offset size)))
+                  file (assoc file :block-list block-list)
+                  state (assoc-in state [:inode-table nodeid] inode)
+                  state (assoc-in state [:file-table nodeid] file)]
+              (agent-do state-agent (continuation! {:size size}))
               state))))))
   (mknod [_ nodeid filename mode continuation!]
     (send

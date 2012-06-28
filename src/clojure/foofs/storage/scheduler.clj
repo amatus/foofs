@@ -18,11 +18,13 @@
   (:import java.util.concurrent.Executor))
 
 (defprotocol Scheduler
-  (fetch-block [this salt block block-size n k continuation!]))
+  (fetch-block [this salt block block-size n k continuation!])
+  (store-block [this salt block-bytes n k continuation!]))
 
 (defrecord BasicScheduler
   [^Executor executor
-   read-block]
+   read-block
+   write-block]
   Scheduler
   (fetch-block [_ salt block block-size n k continuation!]
     (.execute
@@ -37,4 +39,12 @@
               (if (= (seq e-key) (seq test-hash))
                 (continuation! f-block)
                 (continuation! nil)))
+            (continuation! nil))))))
+  (store-block [_ salt f-block n k continuation!]
+    (.execute
+      executor
+      (fn []
+        (let [[e-key e-hash e-block] (encode-block f-block salt)]
+          (if (write-block e-hash e-block n k)
+            (continuation! [e-hash e-key])
             (continuation! nil)))))))

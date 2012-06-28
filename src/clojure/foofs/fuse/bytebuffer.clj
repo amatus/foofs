@@ -57,13 +57,12 @@
     [buffer]
     (when (<= x (.remaining buffer))
       (let [buffer-tail (.duplicate buffer)
-            buffer-head (.duplicate buffer)
-            order (.order buffer)
-            position (+ x (.position buffer))]
+            buffer-head (.slice buffer)
+            order (.order buffer)]
         (.order buffer-tail order)
         (.order buffer-head order)
-        (.position buffer-tail position)
-        (.limit buffer-head position)
+        (.position buffer-tail (+ x (.position buffer)))
+        (.limit buffer-head x)
         [buffer-head buffer-tail]))))
 
 (defn skip-bytes
@@ -138,7 +137,13 @@
   [x]
   (cond
     (instance? bytes-class x) x
-    (instance? ByteBuffer x) (.array x)
+    (instance? ByteBuffer x) (if (.hasArray x)
+                               (.array x)
+                               (let [x2 (.duplicate x)
+                                     array (byte-array (.limit x2))]
+                                 (.position x2 0)
+                                 (.get x2 array)
+                                 array))
     (every? number? x) (into-array Byte/TYPE (map #(.byteValue %) x))))
 
 (defn write-bytes
