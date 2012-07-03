@@ -332,7 +332,8 @@
   [write-out]
   (domonad
     state-m
-    [_ (write-int32 (:size write-out))]
+    [_ (write-int32 (:size write-out))
+     _ (pad 4)]
     nil))
 
 (defn write-statfs-out
