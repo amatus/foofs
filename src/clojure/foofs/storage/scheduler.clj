@@ -15,7 +15,7 @@
 
 (ns foofs.storage.scheduler
   (:use [foofs blocks crypto])
-  (:import java.util.concurrent.Executor))
+  (:import java.nio.ByteBuffer java.util.concurrent.Executor))
 
 (defprotocol Scheduler
   (fetch-block [this salt block block-size n k continuation!])
@@ -37,7 +37,7 @@
             (let [f-block (decode-block e-block e-key salt)
                   test-hash (sha-512 f-block)]
               (if (= (seq e-key) (seq test-hash))
-                (continuation! f-block)
+                (continuation! (ByteBuffer/wrap f-block))
                 (continuation! nil)))
             (continuation! nil))))))
   (store-block [_ salt f-block n k continuation!]

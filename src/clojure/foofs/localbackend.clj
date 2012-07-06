@@ -19,6 +19,7 @@
         [foofs.fuse bytebuffer jna]
         [foofs crypto util])
   (:import [java.io File FileInputStream FileOutputStream]
+           java.nio.ByteBuffer
            [java.util.concurrent ArrayBlockingQueue Executor
             LinkedBlockingQueue]))
 
@@ -118,9 +119,12 @@
                     #(.put blocking-queue [block %])))
     (loop [fetched-blocks {}]
       (if (= block-count (count fetched-blocks))
-        (take size (drop (rem offset block-size)
-                    (apply concat (for [block blocks]
-                                    (get fetched-blocks block)))))
+        (let [buffer (ByteBuffer/allocate (* block-size block-count))]
+          (doseq [block blocks]
+            (.put buffer (get fetched-blocks block)))
+          (.position buffer (rem offset block-size))
+          (.limit buffer (+ size (.position buffer)))
+          buffer)
         (let [[block block-bytes] (.take blocking-queue)]
           (if (nil? block-bytes)
             errno-io
@@ -152,29 +156,31 @@
 (defn write-file!
   [scheduler salt {:keys [block-list block-size n k] :as file} offset size data]
   (let [first-blockid (quot offset block-size)
-        last-blockid (quot (+ size offset) block-size)
-        data (to-byte-array data)]
+        last-blockid (quot (+ size offset) block-size)]
     (doall
       (for [index (range (max (inc last-blockid) (count block-list)))]
         (cond
           (and (> index first-blockid) (< index last-blockid))
-          (let [f-block (take
-                          block-size
-                          (drop (- (* block-size index) offset) data))]
-            (write-block! scheduler salt n k f-block))
+          (let [partial-data (.duplicate data)
+                data-offset (- (* block-size index) offset)]
+            (.position partial-data data-offset)
+            (.limit partial-data (+ block-size data-offset))
+            (write-block! scheduler salt n k partial-data))
           (or (= index first-blockid) (= index last-blockid))
           (let [block (get-nth-or-zero! scheduler salt file index)
-                block-bytes (read-block scheduler salt block block-size n k)
-                data-offset (- (* block-size index) offset)
-                f-block
-                (if (pos? data-offset)
-                  (concat
-                    (drop data-offset data) ;; (assert (= size (count data)))
-                    (drop (- block-size (- size data-offset)) block-bytes))
-                  (concat
-                    (take (- data-offset) block-bytes)
-                    (take (+ block-size data-offset) data)
-                    (drop (+ size (- data-offset)) block-bytes)))]
+                f-block (read-block scheduler salt block block-size n k)
+                partial-data (.duplicate data)
+                data-offset (- (* block-size index) offset)]
+            (if (pos? data-offset)
+              (do
+                (.position partial-data data-offset)
+                (.put f-block partial-data))
+              (do
+                (.position f-block (- data-offset))
+                (.limit partial-data
+                        (min (.remaining partial-data) (.remaining f-block)))
+                (.put f-block partial-data)))
+            (.rewind f-block)
             (write-block! scheduler salt n k f-block))
           true
           (get-nth-or-zero! scheduler salt file index))))))

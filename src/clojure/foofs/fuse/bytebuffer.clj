@@ -137,20 +137,20 @@
   [x]
   (cond
     (instance? bytes-class x) x
-    (instance? ByteBuffer x) (if (.hasArray x)
-                               (.array x)
-                               (let [x2 (.duplicate x)
-                                     array (byte-array (.limit x2))]
-                                 (.position x2 0)
-                                 (.get x2 array)
-                                 array))
+    (instance? ByteBuffer x) (let [x2 (.duplicate x)
+                                   array (byte-array (.remaining x2))]
+                               (.get x2 array)
+                               array)
     (every? number? x) (into-array Byte/TYPE (map #(.byteValue %) x))))
 
 (defn write-bytes
   [x]
   (fn bytes-write!
     [buffer]
-    [nil (.put buffer (to-byte-array x))]))
+    (if (instance? ByteBuffer x)
+      (.put buffer x)
+      (.put buffer (to-byte-array x)))
+    [nil buffer]))
 
 (defn pad
   [x]
