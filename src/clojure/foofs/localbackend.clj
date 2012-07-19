@@ -394,10 +394,8 @@
       (fn [state]
         (if (nil? (get-in state [:inode-table nodeid]))
           (do (continuation! errno-noent) state)
-          (let [file (get-in state [:file-table nodeid])
-                state (assoc-in state [:inode-table nodeid :size] size)
-                state (assoc-in state [:file-table nodeid]
-                                (take size (concat file (repeat (byte 0)))))]
+          (let [state (assoc-in state [:inode-table nodeid :size] size)]
+            ;; TODO truncate block-list
             (agent-do state-agent (continuation! nil))
             state)))))
   (setatime [_ nodeid seconds nseconds continuation!]
