@@ -98,11 +98,15 @@
         dir-name (String. (into-array Character/TYPE (take 2 hash-chars)))
         file-name (String. (into-array Character/TYPE (drop 2 hash-chars)))
         dir-path (str "/tmp/foofs/" dir-name)
-        path (str dir-path "/" file-name)]
+        path (str dir-path "/" file-name)
+        file (File. path)]
     (try
-      (.mkdirs (File. dir-path))
-      (.write (FileOutputStream. path) (to-byte-array e-block))
-      true
+      (if (.isFile file)
+        true
+        (let [dir-file (doto (File. dir-path) (.mkdirs))
+              temp-file (File/createTempFile "foofs" nil dir-file)]
+          (.write (FileOutputStream. temp-file) (to-byte-array e-block))
+          (.renameTo temp-file file)))
       (catch Exception _
         false))))
 
