@@ -233,7 +233,7 @@
             #(continuation! (read-file scheduler salt file offset size)))))))
   (writefile [_ nodeid offset size data continuation!]
     ;; TODO: Write out all the complete blocks before bothering the state agent
-    (send
+    (send-off
       state-agent
       (fn [state]
         (let [inode (get-in state [:inode-table nodeid])]

@@ -22,7 +22,8 @@
   (store-block [this salt block-bytes n k continuation!]))
 
 (defrecord BasicScheduler
-  [^Executor executor
+  [^clojure.lang.Agent state-agent
+   ^Executor executor
    read-block
    write-block]
   Scheduler
@@ -30,16 +31,40 @@
     (.execute
       executor
       (fn []
-        (let [[e-hash e-key] block
-              e-block (read-block e-hash block-size n k)
-              test-hash (sha-512 e-block)]
-          (if (= (seq e-hash) (seq test-hash))
-            (let [f-block (decode-block e-block e-key salt)
-                  test-hash (sha-512 f-block)]
-              (if (= (seq e-key) (seq test-hash))
-                (continuation! (ByteBuffer/wrap f-block))
-                (continuation! nil)))
-            (continuation! nil))))))
+        (send
+          state-agent
+          (fn [state]
+            ;; check to see if this block is already being fetched
+            (if-let [continuations (get-in state [:fetching block])]
+              ;; add ourselves to the continuation list
+              (assoc-in state [:fetching block]
+                        (conj continuations continuation!))
+              ;; else start fetching it using the executor
+              (do
+                (.execute
+                  executor
+                  (fn []
+                    (let [result
+                          (let [[e-hash e-key] block
+                                e-block (read-block e-hash block-size n k)
+                                test-hash (sha-512 e-block)]
+                            (when (= (seq e-hash) (seq test-hash))
+                              (let [f-block (decode-block e-block e-key salt)
+                                    test-hash (sha-512 f-block)]
+                                (when (= (seq e-key) (seq test-hash))
+                                  (ByteBuffer/wrap f-block)))))]
+                      ;; now that we've got it, call all of the continuations
+                      (send
+                        state-agent
+                        (fn [state]
+                          (doseq [continuation! (get-in state
+                                                        [:fetching block])]
+                            (continuation! result))
+                          ;; and remove the fetching state
+                          (assoc state :fetching
+                                 (dissoc (:fetching state) block)))))))
+                ;; and add ourselves to the continuation list
+                (assoc-in state [:fetching block] [continuation!]))))))))
   (store-block [_ salt f-block n k continuation!]
     (.execute
       executor
